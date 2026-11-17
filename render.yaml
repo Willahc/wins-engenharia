@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: wins-engenharia-dashboard
+    runtime: static
+    buildCommand: cp Dashboard/wins_engenharia_validacao.html Dashboard/index.html
+    staticPublishPath: ./Dashboard
+    pullRequestPreviewsEnabled: false
