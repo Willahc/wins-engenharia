@@ -12,6 +12,16 @@ OUT_CSV = os.path.join(BASE_DIR, "Arquivos_Tratados", "obras_novas_com_decisores
 
 LEGIT_INITIAL_EXCEPTIONS = {"mbtribeiro", "dancorfer"}
 COMPANY_NOISE_REGEX = re.compile(r"\b(usina\s+laguna|montera\s+engenharia|axia\s+women)\b", re.I)
+ROLE_AS_NAME_REGEX = re.compile(
+    r"\b(diretor|gerente|coordenador|comprador|suprimentos|engenharia|compras|admin|contato|departamento)\b",
+    re.I,
+)
+BROKEN_MISSING_ACCENT_SLUGS = {
+    "arthur-galvo",
+    "gilberto-loureno-feldman",
+    "vincius-vanzella-de-souza",
+    "caio-t",
+}
 
 
 def strip_accents(s: str) -> str:
@@ -21,6 +31,8 @@ def strip_accents(s: str) -> str:
 def validate_linkedin_url(url: str, nome: str) -> str:
     """Returns clean normalized URL if valid, or '' if broken/truncated/wrong."""
     if not url:
+        return ""
+    if ROLE_AS_NAME_REGEX.search(nome or ""):
         return ""
     u = url.strip()
     u_low = u.lower()
@@ -34,6 +46,13 @@ def validate_linkedin_url(url: str, nome: str) -> str:
     slug_raw = m.group(2)
     slug_dec = urllib.parse.unquote(slug_raw)
     slug_clean = re.sub(r"-[0-9a-f]{6,}$", "", slug_dec)
+    slug_clean = re.sub(r"/(pt|en|es)$", "", slug_clean)
+
+    # Reject synthetic role slugs or known broken slugs
+    if re.match(r"^(diretor|gerente|coordenador|comprador|suprimentos|compras)-", slug_dec):
+        return ""
+    if slug_clean in BROKEN_MISSING_ACCENT_SLUGS or slug_dec in BROKEN_MISSING_ACCENT_SLUGS:
+        return ""
 
     # Truncated slugs cut on accented char (e.g. /in/jo, /in/jos, /in/napole, /in/tain)
     if len(slug_dec) <= 4 or len(slug_clean) <= 3:
@@ -51,6 +70,13 @@ def validate_linkedin_url(url: str, nome: str) -> str:
     slug_alpha = re.sub(r"[^a-z]", "", strip_accents(slug_dec).lower())
     if nome_tokens and not any(t in slug_alpha for t in nome_tokens):
         return ""
+
+    # Reject slugs truncated mid-word at the end (e.g. rodrigo-corr, marcos-andr, valdir-gir)
+    last_slug_tok = slug_clean.split("-")[-1] if "-" in slug_clean else ""
+    if last_slug_tok and len(last_slug_tok) >= 3:
+        for nt in nome_tokens:
+            if nt.startswith(last_slug_tok) and 1 <= len(nt) - len(last_slug_tok) <= 3:
+                return ""
 
     return u
 
