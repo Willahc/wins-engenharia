@@ -18,12 +18,12 @@ HEADERS = {
 }
 
 UF_BY_NAME = {
-    "acre": "AC", "alagoas": "AL", "amapa": "AP", "amazonas": "AM", "bahia": "BA",
-    "ceara": "CE", "distrito federal": "DF", "espirito santo": "ES", "goias": "GO",
-    "maranhao": "MA", "mato grosso": "MT", "mato grosso do sul": "MS", "minas gerais": "MG",
-    "para": "PA", "paraiba": "PB", "parana": "PR", "pernambuco": "PE", "piaui": "PI",
+    "acre": "AC", "alagoas": "AL", "amapá": "AP", "amazonas": "AM", "bahia": "BA",
+    "ceará": "CE", "distrito federal": "DF", "espírito santo": "ES", "goiás": "GO",
+    "maranhão": "MA", "mato grosso": "MT", "mato grosso do sul": "MS", "minas gerais": "MG",
+    "estado do pará": "PA", "no pará": "PA", "paraíba": "PB", "paraná": "PR", "pernambuco": "PE", "piauí": "PI",
     "rio de janeiro": "RJ", "rio grande do norte": "RN", "rio grande do sul": "RS",
-    "rondonia": "RO", "roraima": "RR", "santa catarina": "SC", "sao paulo": "SP",
+    "rondônia": "RO", "roraima": "RR", "santa catarina": "SC", "são paulo": "SP",
     "sergipe": "SE", "tocantins": "TO",
 }
 
@@ -52,13 +52,32 @@ def parse_capex(text: str) -> float | None:
 
 def detect_uf(text: str) -> str | None:
     m = re.search(r"\(([A-Z]{2})\)", text[:1500])
-    if m and m.group(1) in UF_BY_NAME.values():
+    if m and m.group(1) in set(UF_BY_NAME.values()):
         return m.group(1)
-    tn = strip_acc(text[:1500].lower())
+    tl = text[:1500].lower()
     for name, uf in UF_BY_NAME.items():
-        if re.search(rf"\b{name}\b", tn):
+        if re.search(rf"\b{name}\b", tl):
             return uf
     return None
+
+
+def classify_subsetor(text: str) -> str:
+    t = strip_acc(text.lower())
+    if re.search(r"\b(celulose|papel|kraft)\b", t):
+        return "CELULOSE_PAPEL"
+    if re.search(r"\b(alimentos?|bebidas?|frigorific[oa]s?|proteina|leite|laticinios?|nutricao animal|graos)\b", t):
+        return "ALIMENTOS_BEBIDAS"
+    if re.search(r"\b(farmaceutic[oa]s?|medicamentos?|quimic[oa]s?|petroquimic[oa]s?|biorrefinaria|refinaria|fertilizantes?|argamassas?)\b", t):
+        return "QUIMICO_FARMACEUTICO"
+    if re.search(r"\b(automotiv[oa]s?|veiculos?|maquinas?|eletrodomesticos?|linha branca|pneus?)\b", t):
+        return "AUTOMOTIVO_MAQUINAS"
+    if re.search(r"\b(etanol|bioenergia|biogas|biometano|biodiesel|sucroalcooleir[oa]|usina de cana|milho)\b", t):
+        return "ETANOL_BIOENERGIA"
+    if re.search(r"\b(mineracao|mineradora|siderurgia|siderurgica|aco|pelotizacao)\b", t):
+        return "MINERACAO_SIDERURGIA"
+    if re.search(r"\b(energia|solar|eolica|termeletrica|subestacao|saneamento|setor eletrico)\b", t):
+        return "ENERGIA_SANEAMENTO"
+    return "INDUSTRIA_GERAL"
 
 
 def classify_macro(text: str) -> str:
@@ -107,12 +126,16 @@ def main() -> None:
         body = BeautifulSoup(p.get("content", {}).get("rendered", ""), "lxml").get_text(" ", strip=True)
         capex = parse_capex(title + " " + body[:1500])
         uf = detect_uf(title + " " + body[:1500])
-        cat = classify_macro(title + " " + body[:1000])
+        cat = classify_macro(title + " " + body[:500])
+        sub = classify_subsetor(title)
+        if sub == "INDUSTRIA_GERAL":
+            sub = classify_subsetor(body[:350])
         rows.append((
             f"BVMI-{pid}",
             dt,
             title[:240],
             cat,
+            sub,
             uf,
             capex,
             link,
@@ -126,6 +149,7 @@ def main() -> None:
             data_publicacao VARCHAR,
             titulo VARCHAR,
             categoria_macro VARCHAR,
+            subsetor_bvmi VARCHAR,
             uf VARCHAR,
             capex_estimado DOUBLE,
             url_origem VARCHAR,
@@ -133,14 +157,31 @@ def main() -> None:
         );
     """)
     if rows:
-        con.executemany("INSERT INTO bvmi_radar_2026 VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows)
+        con.executemany("INSERT INTO bvmi_radar_2026 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
 
-    # Cruzamento por UF + categoria_macro + faixa de CAPEX (+-40%) com obras nominais existentes
+    # Cruzamento preciso por subsetor tematico + UF + faixa de CAPEX (+-45%)
     con.execute("""
         CREATE OR REPLACE TABLE bvmi_match_obras_wins AS
+        WITH wins_tag AS (
+            SELECT
+                obra_id, fonte, obra_empresa, obra_cnpj, obra_nome, obra_uf,
+                capex_estimado, decisores_acionaveis,
+                CASE
+                    WHEN REGEXP_MATCHES(LOWER(CONCAT(obra_nome, ' ', obra_empresa)), '(celulose|papel|arauco|suzano|klabin|sylvamo|eldorado|melhoramentos)') THEN 'CELULOSE_PAPEL'
+                    WHEN REGEXP_MATCHES(LOWER(CONCAT(obra_nome, ' ', obra_empresa)), '(etanol|biodiesel|biogas|biometano|bioenergia|sucro|acucar|milho|inpasa|raizen|cerradinho|vaccaro|biomil)') THEN 'ETANOL_BIOENERGIA'
+                    WHEN REGEXP_MATCHES(LOWER(CONCAT(obra_nome, ' ', obra_empresa)), '(aliment|bebida|leite|laticin|frigorific|agroindustrial|cooperativa|nestle|agraria|castrolanda|ambev|heineken|coamo|trigo)') THEN 'ALIMENTOS_BEBIDAS'
+                    WHEN REGEXP_MATCHES(LOWER(CONCAT(obra_nome, ' ', obra_empresa)), '(miner|siderurg|vale |gerdau|csn|itaminas)') THEN 'MINERACAO_SIDERURGIA'
+                    WHEN REGEXP_MATCHES(LOWER(CONCAT(obra_nome, ' ', obra_empresa)), '(quimic|farmac|biorrefinaria|refinaria|petroquim|acelen|mapei|fertiliz)') THEN 'QUIMICO_FARMACEUTICO'
+                    WHEN REGEXP_MATCHES(LOWER(CONCAT(obra_nome, ' ', obra_empresa)), '(automot|veicul|maquina|electrolux|marcopolo|volvo|stellantis)') THEN 'AUTOMOTIVO_MAQUINAS'
+                    ELSE 'OUTRO'
+                END AS wins_subsetor
+            FROM todas_obras_consolidadas
+            WHERE decisores_acionaveis > 0 AND capex_estimado IS NOT NULL
+        )
         SELECT
             b.id_bvmi,
             b.data_publicacao,
+            b.subsetor_bvmi,
             b.titulo AS bvmi_titulo,
             b.capex_estimado AS bvmi_capex,
             b.uf AS bvmi_uf,
@@ -150,16 +191,16 @@ def main() -> None:
             o.obra_empresa AS wins_empresa,
             o.obra_cnpj AS wins_cnpj,
             o.obra_nome AS wins_obra_nome,
+            o.obra_uf AS wins_uf,
             o.capex_estimado AS wins_capex,
             o.decisores_acionaveis AS wins_decisores_acionaveis
         FROM bvmi_radar_2026 b
-        JOIN todas_obras_consolidadas o
-          ON b.categoria_macro = o.categoria_macro
+        JOIN wins_tag o
+          ON b.subsetor_bvmi = o.wins_subsetor
+         AND b.subsetor_bvmi != 'INDUSTRIA_GERAL'
          AND (b.uf IS NULL OR b.uf = o.obra_uf)
          AND b.capex_estimado IS NOT NULL
-         AND o.capex_estimado IS NOT NULL
-         AND o.capex_estimado BETWEEN b.capex_estimado * 0.6 AND b.capex_estimado * 1.4
-        WHERE o.decisores_acionaveis > 0
+         AND o.capex_estimado BETWEEN b.capex_estimado * 0.55 AND b.capex_estimado * 1.45
         ORDER BY b.capex_estimado DESC, o.decisores_acionaveis DESC;
     """)
 
