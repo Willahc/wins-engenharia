@@ -1,0 +1,23 @@
+# Dados brutos, tratados e bancos DuckDB (arquivos pesados >100MB / dados locais)
+Arquivos/
+Arquivos_Tratados/
+Banco_Dados/
+*.duckdb
+*.duckdb.wal
+*.db
+*.csv
+*.xlsx
+
+# Ambiente Python e segredos
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+
+# Logs e temporarios
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
