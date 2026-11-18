@@ -1,18 +1,26 @@
 # WiNS Engenharia — Base Consolidada de Obras & Decisores (2026–2027)
 
-## Resumo do Estado Atual (2026-11-17)
+## Resumo do Estado Atual (2026-11-18)
 
-- **Escopo**: Obras civis e industriais ativas (2026–2027), CAPEX > R$ 100 mil, Brasil, com fontes oficiais (`ANEEL SIGA`, `BNDES`, `PNCP`) + portais industriais (`ConVisão CNC`, `CIMM Investimentos`) e radar setorial (`BVMI 2026`).
-- **Total de Obras Consolidadas (`todas_obras_consolidadas`)**: **3.106**
-  - Base oficial (`ANEEL`, `BNDES`, `PNCP`): **2.604**
-  - **ConVisão CNC (`convisao_cnc`)**: **488** obras deduplicadas
-  - **CIMM Investimentos (`cimm_investimentos`)**: **14** investimentos industriais
-  - **Obras com decisor acionável**: **2.602** (**83,8%**)
-  - **Obras com Compras / Engenharia / CAPEX**: **2.004**
-- **Decisores Únicos Acionáveis (`campanha_por_decisor_unico`)**: **1.882 pessoas únicas**
-  - **Com LinkedIn auditado**: **881** (620 perfis validados na web + 234 de diretoria + 199 de ConVisão/CIMM)
-  - **Com telefone validado (`google/libphonenumber`)**: **1.344** (`815` linhas recuperadas para celular 11 dígitos)
-  - **Com e-mail corporativo pós-auditoria SMTP**: **711** (`72` bounces/inválidos/no-MX removidos; `raizen.com` corrigido)
+- **Escopo**: Obras civis e industriais ativas (2026–2027), CAPEX > R$ 100 mil, Brasil, combinando fontes oficiais (`ANEEL SIGA`, `BNDES`, `PNCP`, `IBAMA SISLIC`, `Portal de Obras MG`) + portais industriais (`ConVisão CNC`, `CIMM Investimentos`) e radar setorial (`BVMI 2026`).
+- **Total de Obras Consolidadas (`todas_obras_consolidadas`)**: **3.316**
+  - Base oficial inicial (`ANEEL`, `BNDES`, `PNCP`): **2.604**
+  - **ConVisão CNC (`convisao_cnc`)**: **488** obras deduplicadas (**269** com decisor acionável = **55,1%**)
+  - **Portal de Obras MG (`portal_obras_mg`)**: **168** obras em andamento/a iniciar (**81** acionáveis, **693** vínculos técnicos/fiscais)
+  - **IBAMA SISLIC (`ibama_sislic`)**: **42** licenças `LP`/`LI` de 2026 (**36** com CNPJ resolvido)
+  - **CIMM Investimentos (`cimm_investimentos`)**: **14** investimentos industriais (**10** acionáveis)
+  - **Obras com decisor acionável**: **2.868** (**86,5%**)
+  - **Obras com Compras / Engenharia / CAPEX**: **2.310**
+- **Classificação por Fase da Obra (`fase_obra`)**:
+  - `1_ANUNCIO_LICITACAO_LP`: **236**
+  - `2_NAO_INICIADA_INICIAL`: **2.462**
+  - `3_LI_LIBERADA_CANTEIRO`: **33**
+  - `4_EM_EXECUCAO_ANDAMENTO`: **409**
+  - `5_FINANCIAMENTO_ATIVO`: **176**
+- **Decisores Únicos Acionáveis (`campanha_por_decisor_unico`)**: **2.276 pessoas únicas**
+  - **Com LinkedIn validado**: **1.199**
+  - **Com telefone validado (`google/libphonenumber`)**: **1.484**
+  - **Com e-mail corporativo**: **813**
 - **Radar BVMI (`bvmi_radar_2026` / `bvmi_match_obras_wins`)**: **189** projetos industriais de 2026, com **51** alertas cruzados em **178** pares de obras nominais no WiNS.
 - **Base de Fornecedores Integrada**: **4.090.553 CNPJs** saneados e indexados no DuckDB.
 - **GitHub & Render**: `https://github.com/Willahc/wins-engenharia` (Static Site Blueprint em `render.yaml`).
@@ -21,21 +29,23 @@
 
 ## Principais Entregáveis
 
-- **Dashboard Interativo (4,60+ MB)**: `Dashboard/wins_engenharia_validacao.html`
-- **Planilha Multi-Abas para Prospecção**: `Arquivos_Tratados/WiNS_Prospeccao_Obras_2026_2027.xlsx`
+- **Dashboard Interativo (5,25 MB)**: `Dashboard/wins_engenharia_validacao.html`
+  - Filtro global por **Fase da Obra (`fase_obra`)**, barra de filtros dedicada para **Fornecedores** (Setor, Porte, UF, Canais, Ordenação e exportação CSV), página de **Obra**, página de **Fornecedor** e aba **Decisores Únicos (Anti-Spam)**.
+- **Planilha Multi-Abas para Prospecção**: `Arquivos_Tratados/WiNS_Prospeccao_Obras_2026_2027.xlsx` (`2,39 MB` — `6.861` prioritários Compras/Eng, `3.316` obras, `9.697` decisores acionáveis)
 - **CSV Anti-Spam (1 linha por pessoa)**: `Arquivos_Tratados/WiNS_Prospeccao_Por_Decisor_Unico.csv`
 - **Banco DuckDB Principal**: `Banco_Dados/wins_engenharia.duckdb`
 - **Banco DuckDB Leve (2026–2027)**: `Banco_Dados/obras_civil_industrial_2026_2027_100k.duckdb`
-- **Entregas Especiais (Riteke)**: `Entregas/01_Analise_Executiva_Riteke_WiNS.pdf` e `Entregas/02_Mapeamento_10_Obras_Riteke_WiNS.pdf`
-- **Fila pendente para amanhã**: `Arquivos_Tratados/fila_openbot_convisao_cimm_privadas.csv` (`332` obras privadas restantes do ConVisão)
+- **Dossiês Executivos em PDF (`Entregas/`)**:
+  - `Entregas/01_Analise_Executiva_Riteke_WiNS.pdf` e `Entregas/02_Mapeamento_10_Obras_Riteke_WiNS.pdf`
+  - `Entregas/03_Analise_Executiva_Singapura_WiNS.pdf` e `Entregas/04_Mapeamento_10_Obras_Singapura_WiNS.pdf`
 
 ---
 
 ## Principais Scripts (`scripts/`)
 
 1. `tratar_bases_wins.py` & `criar_banco_duckdb.py` — Saneamento inicial e construção do DuckDB normalizado.
-2. `captar_todas_fontes_2026_2027.py`, `coletar_convisao_obras.py`, `coletar_cimm_investimentos.py`, `coletar_bvmi_radar.py` — Coleta em APIs oficiais (`PNCP`, `BNDES`, `ANEEL`) e portais (`ConVisão`, `CIMM`, `BVMI`).
+2. `captar_todas_fontes_2026_2027.py`, `coletar_convisao_obras.py`, `coletar_cimm_investimentos.py`, `coletar_ibama_sislic.py`, `coletar_mg_obras.py`, `coletar_bvmi_radar.py` — Coletores oficiais e preditivos.
 3. `resolver_cnpjs_aneel.py`, `resolver_cnpjs_convisao_rapidfuzz.py`, `enriquecer_qsa_brasilapi.py`, `substituir_diretor_suprimentos_qsa.py` — Resolução de CNPJs e QSA (`BrasilAPI` / `MinhaReceita`).
-4. `normalizar_telefones_libphonenumber.py`, `auditar_emails_smtp.py`, `higienizar_linkedin_banco.py` — Validação de telefones (`google/libphonenumber`), auditoria SMTP de e-mails e higiene de LinkedIns.
-5. `ingerir_cargos_e_diretoria.py`, `ingerir_validacao_linkedin.py`, `ingerir_convisao_cimm_decisores.py`, `limpar_duplicidades_cnc.py`, `sincronizar_todas_obras_consolidadas.py` — Ingestão, deduplicação e sincronização.
-6. `gerar_dashboard_html.py`, `exportar_planilha_prospeccao.py`, `gerar_pdfs_riteke.py`, `pipeline_diario.py` — Dashboard HTML, Excel/CSV, PDFs e orquestração.
+4. `normalizar_telefones_libphonenumber.py`, `auditar_emails_smtp.py`, `higienizar_linkedin_banco.py` — Validação de telefones (`google/libphonenumber`), auditoria SMTP e higiene de LinkedIns.
+5. `classificar_fases_obras.py`, `limpar_duplicidades_cnc.py`, `sincronizar_todas_obras_consolidadas.py` — Classificação canônica de fases, deduplicação e sincronização.
+6. `gerar_dashboard_html.py`, `exportar_planilha_prospeccao.py`, `gerar_pdfs_riteke.py`, `gerar_pdfs_singapura.py`, `pipeline_diario.py` — Dashboard HTML, Excel/CSV, PDFs e orquestrador diário incremental.
