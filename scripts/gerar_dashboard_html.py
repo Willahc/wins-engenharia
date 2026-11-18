@@ -20,7 +20,7 @@ summary = {
 obras_cols = [
     "id", "fonte", "nome", "empresa", "cnpj", "cat", "uf", "mun",
     "capex", "capTipo", "dtIni", "dtFim", "sit", "url", "matchForn", "dom", "mx", "wa", "telSite",
-    "fornUf", "qDec", "qAci", "qOp", "score"
+    "fornUf", "qDec", "qAci", "qOp", "score", "fase"
 ]
 obras_rows = con.execute("""
 SELECT
@@ -53,7 +53,8 @@ SELECT
         + CASE WHEN o.whatsapp_oficial IS NOT NULL THEN 15 ELSE 0 END
         + CASE WHEN o.capex_estimado >= 10000000 THEN 15 WHEN o.capex_estimado >= 1000000 THEN 10 ELSE 5 END
         + CASE WHEN o.tem_match_fornecedor THEN 10 ELSE 0 END
-    ) AS icp_score
+    ) AS icp_score,
+    COALESCE(o.fase_obra, '2_NAO_INICIADA_INICIAL') AS fase_obra
 FROM todas_obras_consolidadas o
 LEFT JOIN vw_obra_fornecedores_elegiveis f ON o.obra_id = f.obra_id
 ORDER BY icp_score DESC, o.capex_estimado DESC;
@@ -310,6 +311,14 @@ html_template = """<!DOCTYPE html>
       <div class="field"><label>Fonte Oficial</label><select id="f-fonte" onchange="applyFilters()"><option value="">Todas as fontes</option></select></div>
       <div class="field"><label>Categoria</label><select id="f-cat" onchange="applyFilters()"><option value="">Todas (Civil + Industrial)</option><option value="CIVIL">CIVIL</option><option value="INDUSTRIAL">INDUSTRIAL</option></select></div>
       <div class="field"><label>UF (Brasil)</label><select id="f-uf" onchange="applyFilters()"><option value="">Todas as UFs</option></select></div>
+      <div class="field"><label>Fase da Obra</label><select id="f-fase" onchange="applyFilters()">
+        <option value="">Todas as fases</option>
+        <option value="1_ANUNCIO_LICITACAO_LP">Anúncio / Licitação / LP</option>
+        <option value="2_NAO_INICIADA_INICIAL">Não Iniciada / Fase Inicial</option>
+        <option value="3_LI_LIBERADA_CANTEIRO">LI Liberada p/ Canteiro</option>
+        <option value="4_EM_EXECUCAO_ANDAMENTO">Em Execução / Andamento</option>
+        <option value="5_FINANCIAMENTO_ATIVO">Financiamento Ativo (BNDES)</option>
+      </select></div>
       <div class="field"><label>Tipo de CAPEX</label><select id="f-capex-tipo" onchange="applyFilters()"><option value="">Todos</option><option value="0">FINANCEIRO_REAL (PNCP/BNDES)</option><option value="1">PROXY_POTENCIA_KW (ANEEL)</option></select></div>
       <div class="field"><label>Filtro de Qualificação</label><select id="f-decisor" onchange="applyFilters()">
         <option value="">Todas as obras</option>
@@ -528,7 +537,7 @@ function init() {
 }
 
 function resetFilters() {
-  ['f-search','f-fonte','f-cat','f-uf','f-capex-tipo','f-decisor'].forEach(id => document.getElementById(id).value = '');
+  ['f-search','f-fonte','f-cat','f-uf','f-fase','f-capex-tipo','f-decisor'].forEach(id => document.getElementById(id).value = '');
   applyFilters();
 }
 
@@ -537,6 +546,7 @@ function applyFilters() {
   const fonte = document.getElementById('f-fonte').value;
   const cat = document.getElementById('f-cat').value;
   const uf = document.getElementById('f-uf').value;
+  const fase = document.getElementById('f-fase').value;
   const capTipo = document.getElementById('f-capex-tipo').value;
   const mode = document.getElementById('f-decisor').value;
 
@@ -544,6 +554,7 @@ function applyFilters() {
     if (fonte && o.fonte !== fonte) return false;
     if (cat && o.cat !== cat) return false;
     if (uf && o.uf !== uf) return false;
+    if (fase && o.fase !== fase) return false;
     if (capTipo !== '' && String(o.capTipo) !== capTipo) return false;
     if (mode === 'COM_OPERACIONAL' && o.qOp <= 0) return false;
     if (mode === 'COM_ACIONAVEL' && o.qAci <= 0) return false;
@@ -806,13 +817,24 @@ function renderBarsFrom(arr, elId, key, limit) {
   `).join('') || '<div style="color:var(--muted);font-size:12px;">Sem dados.</div>';
 }
 
+const FASE_LABELS = {
+  '1_ANUNCIO_LICITACAO_LP': ['Anúncio / Licitação / LP', 'pill-civil'],
+  '2_NAO_INICIADA_INICIAL': ['Não Iniciada / Inicial', 'pill-ok'],
+  '3_LI_LIBERADA_CANTEIRO': ['LI Liberada Canteiro', 'pill-ok'],
+  '4_EM_EXECUCAO_ANDAMENTO': ['Em Execução / Andamento', 'pill-warn'],
+  '5_FINANCIAMENTO_ATIVO': ['Financiamento Ativo', 'pill-muted'],
+};
+function fasePill(f) {
+  const info = FASE_LABELS[f] || [f || 'N/I', 'pill-muted'];
+  return `<span class="pill ${info[1]}" style="margin-top:3px;display:inline-block;">${esc(info[0])}</span>`;
+}
 function renderObrasTable() {
   const start = (pageObras - 1) * PAGE_SIZE;
   const slice = filteredObras.slice(start, start + PAGE_SIZE);
   document.getElementById('tbody-obras').innerHTML = slice.map(o => `
     <tr>
       <td><span class="pill ${o.score >= 75 ? 'pill-ok' : (o.score >= 50 ? 'pill-civil' : 'pill-muted')}">${o.score}</span></td>
-      <td><span class="pill pill-muted">${esc(o.fonte)}</span></td>
+      <td><span class="pill pill-muted">${esc(o.fonte)}</span><br>${fasePill(o.fase)}</td>
       <td><span class="pill ${o.cat === 'INDUSTRIAL' ? 'pill-ind' : 'pill-civil'}">${esc(o.cat)}</span></td>
       <td><strong>${esc(o.uf)}</strong><br><span style="font-size:11px;color:var(--muted);">${esc(o.mun)}</span></td>
       <td style="max-width:300px;"><a href="javascript:void(0)" onclick="openObraPage('${esc(o.id)}')" style="font-weight:600;color:var(--text);">${esc(o.nome)}</a><div style="font-size:11px;color:var(--muted);">ID: ${esc(o.id)}</div></td>
@@ -965,6 +987,7 @@ function openObraPage(idExt) {
   document.getElementById('det-url-btn').href = o.url || '#';
   document.getElementById('det-badges').innerHTML = `
     <span class="pill ${o.score >= 75 ? 'pill-ok' : (o.score >= 50 ? 'pill-civil' : 'pill-muted')}">ICP Score: ${o.score}/100</span>
+    ${fasePill(o.fase)}
     <span class="pill ${o.cat === 'INDUSTRIAL' ? 'pill-ind' : 'pill-civil'}">${esc(o.cat)}</span>
     <span class="pill pill-muted">${esc(o.fonte)}</span>
     ${o.sit ? `<span class="pill pill-muted">${esc(o.sit)}</span>` : ''}

@@ -1,6 +1,7 @@
 import os
 import subprocess
 import duckdb
+from classificar_fases_obras import apply_fase_classification
 
 BASE_DIR = r"C:\Users\kbadmin\Documents\Projetos\01_Ecossistema_WiNS\Engenharia"
 MAIN_DB = os.path.join(BASE_DIR, "Banco_Dados", "wins_engenharia.duckdb")
@@ -119,6 +120,7 @@ def main() -> None:
 
     after_cnt = con.execute("SELECT COUNT(*) FROM todas_obras_consolidadas").fetchone()[0]
     conv_cnt = con.execute("SELECT COUNT(*) FROM todas_obras_consolidadas WHERE fonte = 'convisao_cnc'").fetchone()[0]
+    apply_fase_classification(con)
 
     con.execute(f"COPY todas_obras_consolidadas TO '{OUT_ALL_CSV}' (HEADER, DELIMITER ',');")
     con.execute("SELECT * FROM campanha_por_decisor_unico").fetchdf().to_csv(OUT_ANTISPAM_CSV, index=False, encoding="utf-8-sig")
