@@ -22,9 +22,8 @@ def classify_perfil(cargo: str, funcao: str) -> str:
     return "5_OUTRO_NAO_CLASSIFICADO"
 
 
-def main() -> None:
-    con = duckdb.connect(MAIN_DB)
-
+def vincular_decisores_existentes(con: duckdb.DuckDBPyConnection) -> tuple[int, int]:
+    """Vincula automaticamente decisores ja mapeados (com LinkedIn validado) para obras novas sem LinkedIn."""
     candidates = con.execute("""
         WITH sem_lk AS (
             SELECT obra_id, fonte, obra_empresa, obra_cnpj, obra_cnpj_raiz, obra_uf, capex_estimado
@@ -117,13 +116,18 @@ def main() -> None:
         inserted += 1
         obras_atingidas.add(obra_id)
 
+    print(f"Candidatos avaliados: {len(candidates)} | Rejeitados por higiene LinkedIn: {rejected}")
+    print(f"Vinculos inseridos/atualizados: {inserted} | Obras recuperadas com LinkedIn valido: {len(obras_atingidas)}")
+    return inserted, len(obras_atingidas)
+
+
+def main() -> None:
+    con = duckdb.connect(MAIN_DB)
+    inserted, obras_rec = vincular_decisores_existentes(con)
     con.execute("CHECKPOINT;")
     con.close()
 
-    print(f"Candidatos avaliados: {len(candidates)} | Rejeitados por higiene LinkedIn: {rejected}")
-    print(f"Vinculos inseridos/atualizados: {inserted} | Obras recuperadas com LinkedIn valido: {len(obras_atingidas)}")
-
-    if inserted > 0:
+    if obras_rec > 0 or inserted > 0:
         subprocess.run([sys.executable, os.path.join(BASE_DIR, "scripts", "normalizar_telefones_libphonenumber.py")], check=True)
         subprocess.run([sys.executable, os.path.join(BASE_DIR, "scripts", "gerar_fila_864_sem_linkedin.py")], check=True)
 

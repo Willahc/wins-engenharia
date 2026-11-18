@@ -3,6 +3,7 @@ import subprocess
 import duckdb
 from classificar_fases_obras import apply_fase_classification
 from detectar_mudancas_fase import ensure_score_column, compute_lead_score, detect_phase_changes
+from vincular_decisores_consolidados_faltantes import vincular_decisores_existentes
 
 BASE_DIR = r"C:\Users\kbadmin\Documents\Projetos\01_Ecossistema_WiNS\Engenharia"
 MAIN_DB = os.path.join(BASE_DIR, "Banco_Dados", "wins_engenharia.duckdb")
@@ -57,6 +58,9 @@ def main() -> None:
         LEFT JOIN empresa_whatsapp_oficial w ON d.dominio_corporativo = w.dominio
         WHERE o.id_externo NOT IN (SELECT obra_id FROM todas_obras_consolidadas);
     """)
+
+    # 1b. Regra obrigatoria: validar se ja existe decisor mapeado no banco para qualquer obra nova/sem LinkedIn
+    vincular_decisores_existentes(con)
 
     # 2. Recalcular contagens de decisores em todas_obras_consolidadas
     con.execute("""
