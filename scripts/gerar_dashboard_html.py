@@ -47,13 +47,13 @@ SELECT
     COALESCE(o.total_decisores, 0),
     COALESCE(o.decisores_acionaveis, 0),
     COALESCE(o.decisores_operacionais, 0),
-    (
+    COALESCE(o.score_prioridade, (
         CASE WHEN COALESCE(o.decisores_operacionais, 0) > 0 THEN 40 WHEN COALESCE(o.decisores_acionaveis, 0) > 0 THEN 20 ELSE 0 END
         + CASE WHEN COALESCE(o.mx_ativo, FALSE) THEN 20 WHEN o.dominio_corporativo IS NOT NULL THEN 10 ELSE 0 END
         + CASE WHEN o.whatsapp_oficial IS NOT NULL THEN 15 ELSE 0 END
         + CASE WHEN o.capex_estimado >= 10000000 THEN 15 WHEN o.capex_estimado >= 1000000 THEN 10 ELSE 5 END
         + CASE WHEN o.tem_match_fornecedor THEN 10 ELSE 0 END
-    ) AS icp_score,
+    )) AS icp_score,
     COALESCE(o.fase_obra, '2_NAO_INICIADA_INICIAL') AS fase_obra
 FROM todas_obras_consolidadas o
 LEFT JOIN vw_obra_fornecedores_elegiveis f ON o.obra_id = f.obra_id
@@ -328,6 +328,14 @@ html_template = """<!DOCTYPE html>
         <option value="COM_MX">Com Domínio MX ativo</option>
         <option value="MATCH_FORN">Com match em fornecedores</option>
       </select></div>
+      <div class="field"><label>Status CRM</label><select id="f-crm" onchange="applyFilters()">
+        <option value="">Todos</option>
+        <option value="NOVO">Novo (não contatado)</option>
+        <option value="CONTATO">Em Contato</option>
+        <option value="PROPOSTA">Proposta Enviada</option>
+        <option value="ANDAMENTO">Em Andamento (Contato + Proposta)</option>
+        <option value="DESCARTADO">Descartado</option>
+      </select></div>
     </div>
   </div>
 
@@ -348,7 +356,13 @@ html_template = """<!DOCTYPE html>
 
   <section class="section" id="sec-obras">
     <div class="card">
-      <div class="card-title">Obras Ativas com Fonte Comprovada (<span id="lbl-obras-count">0</span>)</div>
+      <div class="card-title">
+        <span>Obras Ativas com Fonte Comprovada (<span id="lbl-obras-count">0</span>)</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn" style="padding:4px 10px;font-size:11px;" onclick="exportCRM()">Exportar CRM (.json)</button>
+          <label class="btn" style="padding:4px 10px;font-size:11px;cursor:pointer;">Importar CRM<input type="file" accept=".json" style="display:none;" onchange="importCRM(event)"></label>
+        </div>
+      </div>
       <div class="table-wrap"><table><thead><tr>
         <th onclick="sortBy('score')">Score</th>
         <th onclick="sortBy('fonte')">Fonte</th>
@@ -358,7 +372,7 @@ html_template = """<!DOCTYPE html>
         <th onclick="sortBy('empresa')">Empresa / Domínio / WhatsApp</th>
         <th onclick="sortBy('capex')">CAPEX (R$)</th>
         <th onclick="sortBy('qAci')">Decisores</th>
-        <th>Auditoria</th>
+        <th>Status CRM / Auditoria</th>
       </tr></thead><tbody id="tbody-obras"></tbody></table></div>
       <div class="pagination"><span id="pag-info-obras"></span><div style="display:flex;gap:8px;"><button class="btn" onclick="changePage('obras', -1)">← Anterior</button><button class="btn" onclick="changePage('obras', 1)">Próxima →</button></div></div>
     </div>
@@ -536,8 +550,36 @@ function init() {
   applyFilters();
 }
 
+const CRM_KEY = 'wins_crm_status_v1';
+let CRM_MAP = {};
+try { CRM_MAP = JSON.parse(localStorage.getItem(CRM_KEY) || '{}') || {}; } catch (e) { CRM_MAP = {}; }
+function getCRMStatus(id) { return CRM_MAP[id] || 'NOVO'; }
+function setCRMStatus(id, val) {
+  if (!val || val === 'NOVO') delete CRM_MAP[id]; else CRM_MAP[id] = val;
+  try { localStorage.setItem(CRM_KEY, JSON.stringify(CRM_MAP)); } catch (e) {}
+}
+function exportCRM() {
+  const blob = new Blob([JSON.stringify(CRM_MAP, null, 2)], { type: 'application/json;charset=utf-8;' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'wins_crm_status.json'; a.click();
+}
+function importCRM(ev) {
+  const file = ev.target.files && ev.target.files[0]; if (!file) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const parsed = JSON.parse(rd.result || '{}');
+      if (parsed && typeof parsed === 'object') {
+        CRM_MAP = Object.assign({}, CRM_MAP, parsed);
+        localStorage.setItem(CRM_KEY, JSON.stringify(CRM_MAP));
+        applyFilters();
+      }
+    } catch (e) { alert('Arquivo JSON de CRM invalido.'); }
+  };
+  rd.readAsText(file);
+}
+
 function resetFilters() {
-  ['f-search','f-fonte','f-cat','f-uf','f-fase','f-capex-tipo','f-decisor'].forEach(id => document.getElementById(id).value = '');
+  ['f-search','f-fonte','f-cat','f-uf','f-fase','f-capex-tipo','f-decisor','f-crm'].forEach(id => document.getElementById(id).value = '');
   applyFilters();
 }
 
@@ -549,6 +591,7 @@ function applyFilters() {
   const fase = document.getElementById('f-fase').value;
   const capTipo = document.getElementById('f-capex-tipo').value;
   const mode = document.getElementById('f-decisor').value;
+  const crmF = document.getElementById('f-crm').value;
 
   filteredObras = OBRAS.filter(o => {
     if (fonte && o.fonte !== fonte) return false;
@@ -556,6 +599,11 @@ function applyFilters() {
     if (uf && o.uf !== uf) return false;
     if (fase && o.fase !== fase) return false;
     if (capTipo !== '' && String(o.capTipo) !== capTipo) return false;
+    if (crmF) {
+      const st = getCRMStatus(o.id);
+      if (crmF === 'ANDAMENTO' && st !== 'CONTATO' && st !== 'PROPOSTA') return false;
+      else if (crmF !== 'ANDAMENTO' && st !== crmF) return false;
+    }
     if (mode === 'COM_OPERACIONAL' && o.qOp <= 0) return false;
     if (mode === 'COM_ACIONAVEL' && o.qAci <= 0) return false;
     if (mode === 'COM_WHATSAPP' && !o.wa) return false;
@@ -846,7 +894,15 @@ function renderObrasTable() {
       </td>
       <td style="white-space:nowrap;"><strong>${fmtBRL(o.capex)}</strong><br><span style="font-size:11px;color:var(--muted);">${o.capTipo === 1 ? 'Proxy kW' : 'Valor real'}</span></td>
       <td>${o.qAci > 0 ? `<span class="pill pill-ok">${o.qAci} acionável</span>` : (o.qDec > 0 ? `<span class="pill pill-warn">${o.qDec} sem canal</span>` : '<span style="color:var(--muted);">0</span>')}</td>
-      <td style="white-space:nowrap;"><button class="btn" style="padding:3px 8px;font-size:11px;" onclick="openObraPage('${esc(o.id)}')">Ver página</button><br><a href="${esc(o.url)}" target="_blank" rel="noopener" style="font-size:11px;">Fonte ↗</a></td>
+      <td style="white-space:nowrap;">
+        <select onchange="setCRMStatus('${esc(o.id)}', this.value)" style="padding:2px 6px;font-size:11px;border-radius:6px;background:var(--bg);color:var(--text);border:1px solid var(--border);margin-bottom:4px;">
+          <option value="NOVO" ${getCRMStatus(o.id)==='NOVO'?'selected':''}>Novo</option>
+          <option value="CONTATO" ${getCRMStatus(o.id)==='CONTATO'?'selected':''}>Em Contato</option>
+          <option value="PROPOSTA" ${getCRMStatus(o.id)==='PROPOSTA'?'selected':''}>Proposta</option>
+          <option value="DESCARTADO" ${getCRMStatus(o.id)==='DESCARTADO'?'selected':''}>Descartado</option>
+        </select><br>
+        <button class="btn" style="padding:3px 8px;font-size:11px;" onclick="openObraPage('${esc(o.id)}')">Ver página</button> <a href="${esc(o.url)}" target="_blank" rel="noopener" style="font-size:11px;">Fonte ↗</a>
+      </td>
     </tr>
   `).join('');
   const totalPages = Math.max(1, Math.ceil(filteredObras.length / PAGE_SIZE));

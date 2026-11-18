@@ -2,6 +2,7 @@ import os
 import subprocess
 import duckdb
 from classificar_fases_obras import apply_fase_classification
+from detectar_mudancas_fase import ensure_score_column, compute_lead_score, detect_phase_changes
 
 BASE_DIR = r"C:\Users\kbadmin\Documents\Projetos\01_Ecossistema_WiNS\Engenharia"
 MAIN_DB = os.path.join(BASE_DIR, "Banco_Dados", "wins_engenharia.duckdb")
@@ -14,8 +15,10 @@ def main() -> None:
     con = duckdb.connect(MAIN_DB)
 
     # 1. Inserir em todas_obras_consolidadas quaisquer obras novas de obras_oficiais_ativas (ex: convisao_cnc)
+    dom_cols = {r[0] for r in con.execute("DESCRIBE empresa_dominios_verificados").fetchall()}
+    mx_expr = "COALESCE(d.mx_ativo, FALSE)" if "mx_ativo" in dom_cols else "FALSE"
     before_cnt = con.execute("SELECT COUNT(*) FROM todas_obras_consolidadas").fetchone()[0]
-    con.execute("""
+    con.execute(f"""
         INSERT INTO todas_obras_consolidadas (
             obra_id, origem_registro, status_validacao_fonte, fonte, obra_nome, obra_empresa,
             obra_cnpj, obra_cnpj_raiz, categoria_macro, setor_detalhado, obra_uf, obra_municipio,
@@ -45,7 +48,7 @@ def main() -> None:
             o.url_origem,
             o.tem_match_fornecedor,
             d.dominio_corporativo,
-            COALESCE(d.mx_ativo, FALSE),
+            {mx_expr},
             0, 0, 0,
             w.whatsapp_oficial,
             w.telefones_site
@@ -121,6 +124,9 @@ def main() -> None:
     after_cnt = con.execute("SELECT COUNT(*) FROM todas_obras_consolidadas").fetchone()[0]
     conv_cnt = con.execute("SELECT COUNT(*) FROM todas_obras_consolidadas WHERE fonte = 'convisao_cnc'").fetchone()[0]
     apply_fase_classification(con)
+    ensure_score_column(con)
+    compute_lead_score(con)
+    detect_phase_changes(con)
 
     con.execute(f"COPY todas_obras_consolidadas TO '{OUT_ALL_CSV}' (HEADER, DELIMITER ',');")
     con.execute("SELECT * FROM campanha_por_decisor_unico").fetchdf().to_csv(OUT_ANTISPAM_CSV, index=False, encoding="utf-8-sig")
