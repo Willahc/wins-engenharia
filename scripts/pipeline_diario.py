@@ -14,26 +14,31 @@ def run_step(script_name: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Orquestrador Diario WiNS Engenharia")
-    parser.add_argument("--skip-api", action="store_true", help="Pula coleta nas APIs externas e roda apenas consolidacao/otimizacao local")
+    parser = argparse.ArgumentParser(description="Orquestrador Diario Incremental WiNS Engenharia")
+    parser.add_argument(
+        "--skip-api",
+        action="store_true",
+        help="Pula coleta nas fontes externas e roda apenas deduplicacao, classificacao de fases, dashboard e Excel",
+    )
     args = parser.parse_args()
 
     if not args.skip_api:
-        run_step("captar_todas_fontes_2026_2027.py")
-        run_step("resolver_cnpjs_aneel.py")
-        run_step("enriquecer_qsa_brasilapi.py")
-        run_step("varrer_whatsapp_sites.py")
+        # 1. Portais e fontes preditivas incrementais (preservam decisores e obras existentes)
+        run_step("coletar_convisao_obras.py")
+        run_step("resolver_cnpjs_convisao_rapidfuzz.py")
+        run_step("limpar_duplicidades_cnc.py")
+        run_step("coletar_cimm_investimentos.py")
+        run_step("coletar_ibama_sislic.py")
+        run_step("coletar_mg_obras.py")
+        run_step("coletar_bvmi_radar.py")
 
-    if os.path.exists(os.path.join(BASE_DIR, "Arquivos_Tratados", "retorno_openbot_privadas.csv")) or \
-       os.path.exists(os.path.join(BASE_DIR, "Arquivos_Tratados", "retorno_openbot_publicas.csv")):
-        run_step("ingerir_retorno_openbot.py")
+    # 2. Ingestao de retornos OpenBot (se houver novos registros)
+    if os.path.exists(os.path.join(BASE_DIR, "Arquivos_Tratados", "retorno_openbot_convisao_cimm.csv")):
+        run_step("ingerir_convisao_cimm_decisores.py")
 
-    if os.path.exists(os.path.join(BASE_DIR, "Arquivos_Tratados", "retorno_openbot_lacunas.csv")):
-        run_step("ingerir_lacunas_openbot.py")
-
-    run_step("aplicar_otimizacoes_completas.py")
-    run_step("gerar_dashboard_html.py")
-    print("\nPipeline WiNS Engenharia concluido com sucesso!")
+    # 3. Sincronizacao final (todas_obras_consolidadas + fase_obra + campanha_por_decisor_unico + Dashboard + Excel)
+    run_step("limpar_duplicidades_cnc.py")
+    print("\nPipeline Diario WiNS Engenharia concluido com sucesso!")
 
 
 if __name__ == "__main__":
