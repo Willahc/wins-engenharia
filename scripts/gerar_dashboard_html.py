@@ -629,7 +629,7 @@ function exportFornCSV() {
   if (!filteredForn.length) return alert('Nenhum fornecedor no filtro atual.');
   const cols = ['cnpj','razao','fantasia','setor','cnae','porte','uf','mun','capSocial','email','tel1','matches'];
   const lines = [cols.join(',')].concat(filteredForn.map(f => cols.map(c => '"' + String(f[c] ?? '').replace(/"/g, '""') + '"').join(',')));
-  const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob(['\\uFEFF' + lines.join('\\n')], { type: 'text/csv;charset=utf-8;' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'wins_fornecedores_filtrados.csv';
