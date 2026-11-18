@@ -26,11 +26,11 @@ obras_rows = con.execute("""
 SELECT
     o.obra_id,
     o.fonte,
-    SUBSTR(o.obra_nome, 1, 220),
+    SUBSTR(COALESCE(o.obra_nome, ''), 1, 220),
     COALESCE(SUBSTR(o.obra_empresa, 1, 100), ''),
     COALESCE(o.obra_cnpj, ''),
-    o.categoria_macro,
-    o.obra_uf,
+    COALESCE(o.categoria_macro, ''),
+    COALESCE(o.obra_uf, ''),
     COALESCE(o.obra_municipio, ''),
     ROUND(COALESCE(o.capex_estimado, 0), 0),
     CASE WHEN o.capex_tipo = 'PROXY_POTENCIA_KW' THEN 1 ELSE 0 END,
@@ -97,10 +97,10 @@ SELECT
     COALESCE(dominio_corporativo, ''),
     COALESCE(SPLIT_PART(whatsapp_oficial_empresa, ';', 1), ''),
     qtd_obras_sob_gestao,
-    ROUND(capex_total_sob_gestao, 0),
-    SUBSTR(ufs_atuacao, 1, 40),
-    SUBSTR(obra_principal_maior_capex, 1, 140),
-    url_obra_principal,
+    ROUND(COALESCE(capex_total_sob_gestao, 0), 0),
+    COALESCE(SUBSTR(ufs_atuacao, 1, 40), ''),
+    COALESCE(SUBSTR(obra_principal_maior_capex, 1, 140), ''),
+    COALESCE(url_obra_principal, ''),
     (
         CASE perfil_prioritario WHEN '1_COMPRADOR_SUPRIMENTOS' THEN 40 WHEN '2_GESTOR_TECNICO_OBRA' THEN 35 WHEN '3_DIRETORIA_EXECUTIVA' THEN 25 ELSE 10 END
         + CASE WHEN decisor_email IS NOT NULL THEN 25 ELSE 0 END
@@ -529,8 +529,8 @@ function applyFilters() {
   filteredUnicos = UNICOS.filter(u => {
     if (mode === 'COM_OPERACIONAL' && !['1_COMPRADOR_SUPRIMENTOS','2_GESTOR_TECNICO_OBRA','3_DIRETORIA_EXECUTIVA'].includes(u.perfil)) return false;
     if (mode === 'COM_WHATSAPP' && !u.wa) return false;
-    if (uf && !u.ufs.includes(uf)) return false;
-    if (q && !(u.nome + ' ' + u.cargo + ' ' + u.dom + ' ' + u.obraPrinc).toLowerCase().includes(q)) return false;
+    if (uf && !(u.ufs || '').includes(uf)) return false;
+    if (q && !(String(u.nome || '') + ' ' + String(u.cargo || '') + ' ' + String(u.dom || '') + ' ' + String(u.obraPrinc || '')).toLowerCase().includes(q)) return false;
     return true;
   });
 
