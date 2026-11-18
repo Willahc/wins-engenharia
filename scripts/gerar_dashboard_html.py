@@ -408,6 +408,33 @@ html_template = """<!DOCTYPE html>
   </section>
 
   <section class="section" id="sec-fornecedores">
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-title" style="margin-bottom:10px;">
+        <span>Filtros de Fornecedores</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn" onclick="resetFornFilters()">Limpar Filtros</button>
+          <button class="btn btn-primary" onclick="exportFornCSV()">↓ Exportar Fornecedores CSV</button>
+        </div>
+      </div>
+      <div class="filters-grid">
+        <div class="field"><label>Busca (Razão, Fantasia, CNPJ, CNAE, Município)</label><input type="text" id="ff-search" placeholder="Ex: terraplenagem, Curitiba, 19777..." oninput="debouncedFornFilter()"></div>
+        <div class="field"><label>Setor Consolidado</label><select id="ff-setor" onchange="applyFornFilters()"><option value="">Todos os setores</option></select></div>
+        <div class="field"><label>Porte</label><select id="ff-porte" onchange="applyFornFilters()"><option value="">Todos os portes</option></select></div>
+        <div class="field"><label>UF</label><select id="ff-uf" onchange="applyFornFilters()"><option value="">Todas as UFs</option></select></div>
+        <div class="field"><label>Canais / Qualificação</label><select id="ff-canal" onchange="applyFornFilters()">
+          <option value="">Todos</option>
+          <option value="COM_EMAIL">Com E-mail</option>
+          <option value="COM_TEL">Com Telefone</option>
+          <option value="AMBOS">Com E-mail + Telefone</option>
+          <option value="COM_MATCH">Com Matches em Obras</option>
+        </select></div>
+        <div class="field"><label>Ordenação</label><select id="ff-sort" onchange="applyFornFilters()">
+          <option value="CAP">Maior Capital Social</option>
+          <option value="MATCH">Mais Matches em Obras</option>
+          <option value="NOME">Ordem Alfabética (A-Z)</option>
+        </select></div>
+      </div>
+    </div>
     <div class="kpis" id="forn-kpis"></div>
     <div class="card" style="margin-bottom:16px;">
       <div class="card-title"><span>Fornecedores Principais — Engenharia, Construção, Energia &amp; Locação (<span id="lbl-forn-count">0</span>)</span><span class="card-sub">Top 1.500 estruturados (Média/Grande + Matches) de 4,09M totais</span></div>
@@ -487,6 +514,14 @@ function init() {
   [...new Set(OBRAS.map(o => o.fonte))].sort().forEach(f => { const o = document.createElement('option'); o.value = f; o.textContent = f; fSel.appendChild(o); });
   const uSel = document.getElementById('f-uf');
   [...new Set(OBRAS.map(o => o.uf))].filter(Boolean).sort().forEach(u => { const o = document.createElement('option'); o.value = u; o.textContent = u; uSel.appendChild(o); });
+
+  const ffSetor = document.getElementById('ff-setor');
+  [...new Set(FORNECEDORES.map(f => f.setor))].filter(Boolean).sort().forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; ffSetor.appendChild(o); });
+  const ffPorte = document.getElementById('ff-porte');
+  [...new Set(FORNECEDORES.map(f => f.porte))].filter(Boolean).sort().forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p; ffPorte.appendChild(o); });
+  const ffUf = document.getElementById('ff-uf');
+  [...new Set(FORNECEDORES.map(f => f.uf))].filter(Boolean).sort().forEach(u => { const o = document.createElement('option'); o.value = u; o.textContent = u; ffUf.appendChild(o); });
+
   document.getElementById('kpi-hist-sub').textContent = `Histórico: ${RAW.summary.obras_antigas.toLocaleString('pt-BR')} obras · ${RAW.summary.fornecedores_total.toLocaleString('pt-BR')} fornecedores`;
   renderFontes();
   applyFilters();
@@ -534,15 +569,71 @@ function applyFilters() {
     return true;
   });
 
-  filteredForn = FORNECEDORES.filter(f => {
-    if (uf && f.uf !== uf) return false;
-    if (q && !(f.razao + ' ' + f.fantasia + ' ' + f.cnpj + ' ' + f.cnae + ' ' + f.setor + ' ' + f.mun).toLowerCase().includes(q)) return false;
-    return true;
-  });
+  filteredForn = filterFornecedoresList();
 
   sortObras();
   pageObras = 1; pageDec = 1; pageUnicos = 1; pageForn = 1;
   renderAll();
+}
+
+let fornTimer = null;
+function debouncedFornFilter() { clearTimeout(fornTimer); fornTimer = setTimeout(applyFornFilters, 150); }
+
+function filterFornecedoresList() {
+  const gq = (document.getElementById('f-search').value || '').trim().toLowerCase();
+  const guf = document.getElementById('f-uf').value || '';
+  const fq = (document.getElementById('ff-search').value || '').trim().toLowerCase();
+  const fsetor = document.getElementById('ff-setor').value || '';
+  const fporte = document.getElementById('ff-porte').value || '';
+  const fuf = document.getElementById('ff-uf').value || '';
+  const fcanal = document.getElementById('ff-canal').value || '';
+  const fsort = document.getElementById('ff-sort').value || 'CAP';
+  const effUf = fuf || guf;
+  const effQ = fq || gq;
+
+  const list = FORNECEDORES.filter(f => {
+    if (effUf && f.uf !== effUf) return false;
+    if (fsetor && f.setor !== fsetor) return false;
+    if (fporte && f.porte !== fporte) return false;
+    if (fcanal === 'COM_EMAIL' && !f.email) return false;
+    if (fcanal === 'COM_TEL' && !f.tel1) return false;
+    if (fcanal === 'AMBOS' && (!f.email || !f.tel1)) return false;
+    if (fcanal === 'COM_MATCH' && !(f.matches > 0)) return false;
+    if (effQ && !(String(f.razao || '') + ' ' + String(f.fantasia || '') + ' ' + String(f.cnpj || '') + ' ' + String(f.cnae || '') + ' ' + String(f.cnaeDesc || '') + ' ' + String(f.setor || '') + ' ' + String(f.mun || '')).toLowerCase().includes(effQ)) return false;
+    return true;
+  });
+
+  list.sort((a, b) => {
+    if (fsort === 'MATCH') return (b.matches - a.matches) || (b.capSocial - a.capSocial);
+    if (fsort === 'NOME') return String(a.razao || '').localeCompare(String(b.razao || ''));
+    return (b.capSocial - a.capSocial) || (b.matches - a.matches);
+  });
+  return list;
+}
+
+function applyFornFilters() {
+  filteredForn = filterFornecedoresList();
+  pageForn = 1;
+  document.getElementById('nav-cnt-forn').textContent = filteredForn.length.toLocaleString('pt-BR');
+  document.getElementById('lbl-forn-count').textContent = filteredForn.length.toLocaleString('pt-BR');
+  renderFornTable();
+}
+
+function resetFornFilters() {
+  ['ff-search','ff-setor','ff-porte','ff-uf','ff-canal'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('ff-sort').value = 'CAP';
+  applyFornFilters();
+}
+
+function exportFornCSV() {
+  if (!filteredForn.length) return alert('Nenhum fornecedor no filtro atual.');
+  const cols = ['cnpj','razao','fantasia','setor','cnae','porte','uf','mun','capSocial','email','tel1','matches'];
+  const lines = [cols.join(',')].concat(filteredForn.map(f => cols.map(c => '"' + String(f[c] ?? '').replace(/"/g, '""') + '"').join(',')));
+  const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'wins_fornecedores_filtrados.csv';
+  a.click();
 }
 
 function sortBy(col) { if (sortCol === col) sortAsc = !sortAsc; else { sortCol = col; sortAsc = false; } sortObras(); renderObrasTable(); }
@@ -789,8 +880,9 @@ function renderFontes() {
 }
 
 function renderFornTable() {
-  const uf = document.getElementById('f-uf').value;
-  const resRows = RAW.fornResumo.filter(r => !uf || r[0] === uf);
+  const uf = document.getElementById('ff-uf').value || document.getElementById('f-uf').value;
+  const setorSel = document.getElementById('ff-setor').value;
+  const resRows = RAW.fornResumo.filter(r => (!uf || r[0] === uf) && (!setorSel || r[1] === setorSel));
   const totBase = resRows.reduce((s, r) => s + r[2], 0);
   const totAci = resRows.reduce((s, r) => s + r[3], 0);
   const totEst = resRows.reduce((s, r) => s + r[4], 0);
