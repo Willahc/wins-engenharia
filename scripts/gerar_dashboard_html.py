@@ -5,8 +5,11 @@ import duckdb
 BASE_DIR = r"C:\Users\kbadmin\Documents\Projetos\01_Ecossistema_WiNS\Engenharia"
 MAIN_DB = os.path.join(BASE_DIR, "Banco_Dados", "wins_engenharia.duckdb")
 OUT_DIR = os.path.join(BASE_DIR, "Dashboard")
+DATA_DIR = os.path.join(OUT_DIR, "data")
 os.makedirs(OUT_DIR, exist_ok=True)
+os.makedirs(DATA_DIR, exist_ok=True)
 OUT_HTML = os.path.join(OUT_DIR, "wins_engenharia_validacao.html")
+OUT_DATA_JS = os.path.join(DATA_DIR, "wins_data.js")
 
 con = duckdb.connect(MAIN_DB, read_only=True)
 
@@ -160,6 +163,43 @@ ORDER BY matches_count DESC, COALESCE(capital_social, 0) DESC
 LIMIT 1500;
 """).fetchall()
 
+bvmi_rows = con.execute("""
+SELECT
+    id_bvmi,
+    COALESCE(data_publicacao, ''),
+    COALESCE(subsetor_bvmi, ''),
+    COALESCE(SUBSTR(bvmi_titulo, 1, 140), ''),
+    ROUND(COALESCE(bvmi_capex, 0), 0),
+    COALESCE(bvmi_uf, ''),
+    COALESCE(bvmi_url, ''),
+    COALESCE(wins_obra_id, ''),
+    COALESCE(wins_empresa, ''),
+    COALESCE(SUBSTR(wins_obra_nome, 1, 120), ''),
+    COALESCE(wins_uf, ''),
+    COALESCE(wins_decisores_acionaveis, 0)
+FROM bvmi_match_obras_wins
+ORDER BY COALESCE(bvmi_capex, 0) DESC, wins_decisores_acionaveis DESC
+LIMIT 300;
+""").fetchall()
+
+alertas_rows = con.execute("""
+SELECT
+    COALESCE(data_alerta, ''),
+    COALESCE(tipo_alerta, ''),
+    COALESCE(obra_id, ''),
+    COALESCE(SUBSTR(obra_nome, 1, 130), ''),
+    COALESCE(obra_empresa, ''),
+    COALESCE(obra_uf, ''),
+    COALESCE(fonte, ''),
+    ROUND(COALESCE(capex_estimado, 0), 0),
+    COALESCE(fase_anterior, ''),
+    COALESCE(fase_nova, ''),
+    COALESCE(score_prioridade, 0)
+FROM alertas_mudanca_fase
+ORDER BY data_alerta DESC, score_prioridade DESC
+LIMIT 300;
+""").fetchall()
+
 con.close()
 
 data_json = json.dumps({
@@ -174,6 +214,8 @@ data_json = json.dumps({
     "forn": [list(r) for r in forn_rows],
     "fornResumo": [list(r) for r in forn_resumo],
     "fontes": [list(r) for r in fontes],
+    "bvmiMatches": [list(r) for r in bvmi_rows],
+    "alertasFase": [list(r) for r in alertas_rows],
 }, ensure_ascii=False, separators=(",", ":"))
 
 html_template = """<!DOCTYPE html>
@@ -183,6 +225,7 @@ html_template = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WiNS Engenharia — Dashboard de Validação & Prospecção</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="data/wins_data.js"></script>
 <style>
   :root {
     --bg: #0f172a; --surface: #1e293b; --surface-2: #263348; --border: #334155;
@@ -285,6 +328,7 @@ html_template = """<!DOCTYPE html>
   <div class="nav-item" onclick="switchSection('unicos', this)"><span>🎯 Decisores Únicos (Anti-Spam)</span><span class="badge" id="nav-cnt-unicos">0</span></div>
   <div class="nav-item" onclick="switchSection('decisores', this)"><span>👤 Todos os Vínculos</span><span class="badge" id="nav-cnt-dec">0</span></div>
   <div class="nav-item" onclick="switchSection('fornecedores', this)"><span>🏭 Fornecedores (Top / UF)</span><span class="badge" id="nav-cnt-forn">0</span></div>
+  <div class="nav-item" onclick="switchSection('alertas', this)"><span>🔔 Alertas &amp; Radar BVMI</span><span class="badge" id="nav-cnt-alertas">0</span></div>
   <div class="nav-item" onclick="switchSection('fontes', this)"><span>🗂️ Auditoria de Fontes</span><span class="badge" id="nav-cnt-fontes">0</span></div>
   <div class="sidebar-footer">
     Base: <code>wins_engenharia.duckdb</code><br>
@@ -423,8 +467,17 @@ html_template = """<!DOCTYPE html>
       <div class="card-title"><span>Decisores Vinculados à Obra (<span id="det-dec-cnt">0</span>)</span></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Perfil / Match</th><th>Nome</th><th>Cargo</th><th>E-mail</th><th>Telefone</th><th>LinkedIn</th><th>Status</th></tr></thead>
+          <thead><tr><th>Perfil / Match</th><th>Nome</th><th>Cargo</th><th>E-mail</th><th>Telefone</th><th>LinkedIn</th><th>Status / Abordagem</th></tr></thead>
           <tbody id="det-tbody-dec"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <div class="card-title"><span>Top Fornecedores Aderentes na UF (<span id="det-forn-cnt">0</span>)</span><span class="card-sub">Ordenados por matches e capital social</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>CNPJ</th><th>Empresa</th><th>Setor / CNAE</th><th>Porte</th><th>Município</th><th>Contatos</th></tr></thead>
+          <tbody id="det-tbody-forn"></tbody>
         </table>
       </div>
     </div>
@@ -482,6 +535,21 @@ html_template = """<!DOCTYPE html>
     </div>
   </section>
 
+  <section class="section" id="sec-alertas">
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title"><span>Alertas de Mudança de Fase &amp; Novas Obras Prioritárias (<span id="lbl-alertas-fase">0</span>)</span><span class="card-sub">Gerado automaticamente pelo detectar_mudancas_fase.py</span></div>
+      <div class="table-wrap"><table><thead><tr>
+        <th>Data</th><th>Tipo</th><th>Score</th><th>Obra / Empresa</th><th>UF / Fonte</th><th>CAPEX</th><th>Transição de Fase</th>
+      </tr></thead><tbody id="tbody-alertas-fase"></tbody></table></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span>Radar BVMI 2026 — Cross-Match com Obras WiNS (<span id="lbl-alertas-bvmi">0</span>)</span><span class="card-sub">Projetos industriais 2026 cruzados com obras ativas</span></div>
+      <div class="table-wrap"><table><thead><tr>
+        <th>Data</th><th>Subsetor</th><th>Projeto BVMI</th><th>CAPEX BVMI</th><th>Obra WiNS Correspondente</th><th>Decisores</th>
+      </tr></thead><tbody id="tbody-alertas-bvmi"></tbody></table></div>
+    </div>
+  </section>
+
   <section class="section" id="sec-fontes">
     <div class="card">
       <div class="card-title">Auditoria do Inventário Consolidado de Fontes (<span id="lbl-fontes-count">0</span>)</div>
@@ -500,7 +568,7 @@ html_template = """<!DOCTYPE html>
 </div>
 
 <script>
-const RAW = __DATA_JSON__;
+const RAW = window.RAW;
 
 // Unpack compact columnar arrays into lightweight objects once at load
 function unpack(cols, rows) {
@@ -547,6 +615,7 @@ function init() {
 
   document.getElementById('kpi-hist-sub').textContent = `Histórico: ${RAW.summary.obras_antigas.toLocaleString('pt-BR')} obras · ${RAW.summary.fornecedores_total.toLocaleString('pt-BR')} fornecedores`;
   renderFontes();
+  renderAlertas();
   applyFilters();
 }
 
@@ -799,7 +868,7 @@ function renderCharts() {
   destroyChart('c-perfis');
   CHARTS['c-perfis'] = new Chart(document.getElementById('c-perfis'), {
     type: 'bar',
-    data: { labels: prEnt.map(e => e[0].replace(/^\d_/, '')), datasets: [{ data: prEnt.map(e => e[1]), backgroundColor: prEnt.map(e => prColors[e[0]] || '#38bdf8'), borderRadius: 8, barThickness: 22 }] },
+    data: { labels: prEnt.map(e => e[0].replace(/^\\d_/, '')), datasets: [{ data: prEnt.map(e => e[1]), backgroundColor: prEnt.map(e => prColors[e[0]] || '#38bdf8'), borderRadius: 8, barThickness: 22 }] },
     options: {
       indexAxis: 'y', responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
@@ -924,7 +993,7 @@ function renderUnicosTable() {
         ${u.wa ? `<a href="https://wa.me/55${esc(u.wa)}" target="_blank" rel="noopener">WhatsApp ↗</a>` : ''}
       </td>
       <td style="white-space:nowrap;"><strong>${u.qObras} obra(s)</strong><br><span style="color:var(--accent);">${fmtBRL(u.capex)}</span><br><span style="font-size:11px;color:var(--muted);">UFs: ${esc(u.ufs)}</span></td>
-      <td style="max-width:260px;font-size:12px;">${esc(u.obraPrinc)}<br><a href="${esc(u.urlPrinc)}" target="_blank" rel="noopener">Abrir fonte ↗</a></td>
+      <td style="max-width:260px;font-size:12px;">${esc(u.obraPrinc)}<br><a href="${esc(u.urlPrinc)}" target="_blank" rel="noopener">Abrir fonte ↗</a> <button class="btn" style="padding:2px 7px;font-size:11px;margin-left:4px;" onclick="copyAbordagem(this, '${esc(u.nome)}', '${esc(u.cargo)}', '${esc(u.obraPrinc)}', '${esc(u.ufs)}', '')">Copiar Abordagem</button></td>
     </tr>
   `).join('');
   const totalPages = Math.max(1, Math.ceil(filteredUnicos.length / PAGE_SIZE));
@@ -955,6 +1024,52 @@ function renderFontes() {
   document.getElementById('tbody-fontes').innerHTML = RAW.fontes.map(f => `
     <tr><td><strong>${esc(f[0])}</strong></td><td><span class="pill pill-muted">${esc(f[1])}</span></td><td>${Number(f[2]).toLocaleString('pt-BR')}</td><td>${Number(f[3]).toLocaleString('pt-BR')}</td><td>${f[4]}%</td><td>${Number(f[5]).toLocaleString('pt-BR',{minimumFractionDigits:1})}</td><td>${f[6] ? '<span class="pill pill-warn">Outlier</span>' : '<span class="pill pill-ok">OK</span>'}</td></tr>
   `).join('');
+}
+
+function renderAlertas() {
+  const al = RAW.alertasFase || [];
+  const bv = RAW.bvmiMatches || [];
+  document.getElementById('nav-cnt-alertas').textContent = al.length + bv.length;
+  document.getElementById('lbl-alertas-fase').textContent = al.length;
+  document.getElementById('lbl-alertas-bvmi').textContent = bv.length;
+
+  document.getElementById('tbody-alertas-fase').innerHTML = al.length ? al.map(a => `
+    <tr>
+      <td style="white-space:nowrap;">${esc(a[0])}</td>
+      <td><span class="pill ${a[1]==='MUDANCA_FASE'?'pill-ok':'pill-civil'}">${esc(a[1])}</span></td>
+      <td><span class="pill pill-ok">${a[10]}</span></td>
+      <td><a href="javascript:void(0)" onclick="openObraPage('${esc(a[2])}')" style="font-weight:600;color:var(--text);">${esc(a[3])}</a><div style="font-size:11px;color:var(--muted);">${esc(a[4] || '—')}</div></td>
+      <td>${esc(a[5])}<br><span style="font-size:11px;color:var(--muted);">${esc(a[6])}</span></td>
+      <td style="white-space:nowrap;">${a[7] > 0 ? fmtBRL(a[7]) : '—'}</td>
+      <td style="font-size:12px;">${a[8] ? esc(a[8]) + ' → ' : ''}<strong>${esc(a[9])}</strong></td>
+    </tr>
+  `).join('') : '<tr><td colspan="7" style="color:var(--muted);">Snapshot inicial capturado. Mudanças futuras aparecerão aqui automaticamente após a próxima coleta.</td></tr>';
+
+  document.getElementById('tbody-alertas-bvmi').innerHTML = bv.length ? bv.map(b => `
+    <tr>
+      <td style="white-space:nowrap;">${esc((b[1] || '').slice(0, 10))}</td>
+      <td><span class="pill pill-ind">${esc(b[2])}</span></td>
+      <td style="max-width:260px;"><a href="${esc(b[6])}" target="_blank" rel="noopener">${esc(b[3])} ↗</a></td>
+      <td style="white-space:nowrap;">${b[4] > 0 ? fmtBRL(b[4]) : '—'}</td>
+      <td style="max-width:260px;"><a href="javascript:void(0)" onclick="openObraPage('${esc(b[7])}')" style="font-weight:600;color:var(--text);">${esc(b[8])}</a><div style="font-size:11px;color:var(--muted);">${esc(b[9])} (${esc(b[10])})</div></td>
+      <td><span class="pill ${b[11]>0?'pill-ok':'pill-muted'}">${b[11]} acionável</span></td>
+    </tr>
+  `).join('') : '<tr><td colspan="6" style="color:var(--muted);">Sem cruzamentos BVMI no momento.</td></tr>';
+}
+
+function copyAbordagem(btn, nome, cargo, obra, uf, fase) {
+  const first = String(nome || '').trim().split(/\\s+/)[0] || 'Olá';
+  const faseTxt = (FASE_LABELS[fase] && FASE_LABELS[fase][0]) ? ' (fase: ' + FASE_LABELS[fase][0] + ')' : '';
+  const msg = `Olá, ${first}! Tudo bem? Vi sua atuação como ${cargo || 'decisor(a)'} no projeto "${obra}"${uf ? ' (' + uf + ')' : ''}${faseTxt}. Trabalhamos com fornecimento e engenharia para obras industriais e civis de médio/grande porte e gostaríamos de alinhar sobre demandas de suprimentos e contratação técnica. Podemos conversar rapidamente esta semana?`;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(msg).then(() => {
+      const old = btn.textContent;
+      btn.textContent = 'Copiado ✓';
+      setTimeout(() => { btn.textContent = old; }, 1600);
+    });
+  } else {
+    prompt('Copie a mensagem de abordagem:', msg);
+  }
 }
 
 function renderFornTable() {
@@ -1088,9 +1203,22 @@ function openObraPage(idExt) {
       <td>${esc(d.email || '—')}</td>
       <td>${esc(d.tel || '—')}</td>
       <td>${d.lk ? `<a href="${esc(d.lk)}" target="_blank" rel="noopener">LinkedIn ↗</a>` : '—'}</td>
-      <td>${d.aci ? '<span class="pill pill-ok">Acionável</span>' : '<span class="pill pill-warn">Sem canal</span>'}</td>
+      <td style="white-space:nowrap;">${d.aci ? '<span class="pill pill-ok">Acionável</span>' : '<span class="pill pill-warn">Sem canal</span>'} <button class="btn" style="padding:2px 7px;font-size:11px;margin-left:4px;" onclick="copyAbordagem(this, '${esc(d.nome)}', '${esc(d.cargo)}', '${esc(o.nome)}', '${esc(o.uf)}', '${esc(o.fase)}')">Copiar Abordagem</button></td>
     </tr>
   `).join('') : '<tr><td colspan="7" style="color:var(--muted);">Nenhum decisor vinculado a esta obra até o momento.</td></tr>';
+
+  const topForn = FORNECEDORES.filter(f => !o.uf || f.uf === o.uf).slice(0, 8);
+  document.getElementById('det-forn-cnt').textContent = topForn.length;
+  document.getElementById('det-tbody-forn').innerHTML = topForn.length ? topForn.map(f => `
+    <tr>
+      <td style="white-space:nowrap;font-size:12px;">${esc(fmtCNPJ(f.cnpj))}</td>
+      <td><a href="javascript:void(0)" onclick="openFornPage('${esc(f.cnpj)}')" style="font-weight:600;color:var(--text);">${esc(f.razao)}</a></td>
+      <td><span class="pill pill-muted">${esc(f.setor)}</span><div style="font-size:11px;color:var(--muted);">CNAE ${esc(f.cnae)}</div></td>
+      <td>${esc(f.porte || '—')}</td>
+      <td>${esc(f.mun || '')}/${esc(f.uf)}</td>
+      <td style="font-size:12px;">${f.email ? '✉ '+esc(f.email)+'<br>' : ''}${f.tel1 ? '☎ '+esc(f.tel1) : ''}</td>
+    </tr>
+  `).join('') : '<tr><td colspan="6" style="color:var(--muted);">Nenhum fornecedor listado para esta UF na amostra.</td></tr>';
 
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('sec-obra-detalhe').classList.add('active');
@@ -1114,8 +1242,10 @@ init();
 </html>
 """
 
-final_html = html_template.replace("__DATA_JSON__", data_json)
-with open(OUT_HTML, "w", encoding="utf-8") as f:
-    f.write(final_html)
+with open(OUT_DATA_JS, "w", encoding="utf-8") as f:
+    f.write("window.RAW=" + data_json + ";")
 
-print(f"Dashboard otimizado gerado: {OUT_HTML} ({os.path.getsize(OUT_HTML)/(1024*1024):.2f} MB)")
+with open(OUT_HTML, "w", encoding="utf-8") as f:
+    f.write(html_template)
+
+print(f"Dashboard otimizado gerado: {OUT_HTML} ({os.path.getsize(OUT_HTML)/1024:.1f} KB) + {OUT_DATA_JS} ({os.path.getsize(OUT_DATA_JS)/(1024*1024):.2f} MB)")

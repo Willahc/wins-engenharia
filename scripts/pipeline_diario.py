@@ -16,7 +16,7 @@ def run_step(script_name: str):
 
 def git_publish():
     print("\n>>> Publicando atualizacao do Dashboard no GitHub/Render...")
-    subprocess.run(["git", "-C", BASE_DIR, "add", "Dashboard/wins_engenharia_validacao.html", "README_PROJETO.md"], check=True)
+    subprocess.run(["git", "-C", BASE_DIR, "add", "Dashboard/wins_engenharia_validacao.html", "Dashboard/data/wins_data.js", "README_PROJETO.md"], check=True)
     status = subprocess.run(["git", "-C", BASE_DIR, "status", "--porcelain"], capture_output=True, text=True, check=True)
     if not status.stdout.strip():
         print("Nenhuma mudanca pendente para commit.")
