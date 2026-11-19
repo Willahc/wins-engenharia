@@ -133,7 +133,7 @@
     <div class="filters-grid">
       <div class="field"><label>Busca (Obra, Empresa, CNPJ, Pessoa)</label><input type="text" id="f-search" placeholder="Ex: Eneva, Subestação, Ana Luiza..." oninput="debouncedFilter()"></div>
       <div class="field"><label>Fonte Oficial</label><select id="f-fonte" onchange="applyFilters()"><option value="">Todas as fontes</option></select></div>
-      <div class="field"><label>Categoria</label><select id="f-cat" onchange="applyFilters()"><option value="">Todas (Civil + Industrial)</option><option value="CIVIL">CIVIL</option><option value="INDUSTRIAL">INDUSTRIAL</option></select></div>
+      <div class="field"><label>Categoria</label><select id="f-cat" onchange="applyFilters()"><option value="">Todas as categorias</option></select></div>
       <div class="field"><label>UF (Brasil)</label><select id="f-uf" onchange="applyFilters()"><option value="">Todas as UFs</option></select></div>
       <div class="field"><label>Fase da Obra</label><select id="f-fase" onchange="applyFilters()">
         <option value="">Todas as fases</option>
@@ -172,9 +172,11 @@
     </div>
     <div class="charts-grid">
       <div class="card"><div class="card-title"><span>Cobertura dos Pilares</span><span class="card-sub">% sobre obras filtradas</span></div><div class="chart-box"><canvas id="c-pilares"></canvas></div><div id="chart-pilares"></div></div>
-      <div class="card"><div class="card-title"><span>Distribuição por Fonte</span><span class="card-sub">Participação &amp; CAPEX</span></div><div class="chart-box"><canvas id="c-fontes"></canvas></div><div id="chart-fontes"></div></div>
+      <div class="card"><div class="card-title"><span>Distribuição por Fonte</span><span class="card-sub">Clique p/ filtrar · Participação</span></div><div class="chart-box"><canvas id="c-fontes"></canvas></div><div id="chart-fontes"></div></div>
+      <div class="card"><div class="card-title"><span>Fases da Obra (Timing)</span><span class="card-sub">Clique p/ filtrar · LP → Execução</span></div><div class="chart-box"><canvas id="c-fases"></canvas></div><div id="chart-fases"></div></div>
+      <div class="card"><div class="card-title"><span>Faixas de Lead Score</span><span class="card-sub">Qualificação 0–100</span></div><div class="chart-box"><canvas id="c-scores"></canvas></div><div id="chart-scores"></div></div>
       <div class="card"><div class="card-title"><span>Decisores Únicos (Anti-Spam)</span><span class="card-sub">Por poder de contratação</span></div><div class="chart-box"><canvas id="c-perfis"></canvas></div><div id="chart-perfis"></div></div>
-      <div class="card"><div class="card-title"><span>Top 10 UFs — Obras × CAPEX</span><span class="card-sub">Barras: Obras | Linha: CAPEX (bi)</span></div><div class="chart-box"><canvas id="c-ufs"></canvas></div><div id="chart-ufs"></div></div>
+      <div class="card"><div class="card-title"><span>Top 10 UFs — Obras × CAPEX</span><span class="card-sub">Clique p/ filtrar · Barras: Obras | Linha: CAPEX</span></div><div class="chart-box"><canvas id="c-ufs"></canvas></div><div id="chart-ufs"></div></div>
     </div>
   </section>
 
@@ -383,6 +385,8 @@ function esc(s) { return String(s || '').replace(/[&<>"']/g, m => ({'&':'&amp;',
 function init() {
   const fSel = document.getElementById('f-fonte');
   [...new Set(OBRAS.map(o => o.fonte))].sort().forEach(f => { const o = document.createElement('option'); o.value = f; o.textContent = f; fSel.appendChild(o); });
+  const cSel = document.getElementById('f-cat');
+  [...new Set(OBRAS.map(o => o.cat))].filter(Boolean).sort().forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; cSel.appendChild(o); });
   const uSel = document.getElementById('f-uf');
   [...new Set(OBRAS.map(o => o.uf))].filter(Boolean).sort().forEach(u => { const o = document.createElement('option'); o.value = u; o.textContent = u; uSel.appendChild(o); });
 
@@ -564,17 +568,23 @@ function renderAll() {
   document.getElementById('lbl-forn-count').textContent = filteredForn.length.toLocaleString('pt-BR');
 
   const n = filteredObras.length;
+  const quentes = filteredObras.filter(o => o.score >= 75).length;
   document.getElementById('kpi-obras').textContent = n.toLocaleString('pt-BR');
-  document.getElementById('kpi-obras-sub').textContent = `${filteredObras.filter(o => o.wa).length} com WhatsApp oficial`;
+  document.getElementById('kpi-obras-sub').textContent = `${quentes.toLocaleString('pt-BR')} muito quentes (Score >= 75) · ${filteredObras.filter(o => o.wa).length} c/ WhatsApp`;
   const capReal = filteredObras.filter(o => o.capTipo === 0).reduce((s, o) => s + o.capex, 0);
   const capProxy = filteredObras.filter(o => o.capTipo === 1).reduce((s, o) => s + o.capex, 0);
   document.getElementById('kpi-capex-real').textContent = fmtBRL(capReal);
   document.getElementById('kpi-capex-proxy').textContent = 'Proxy ANEEL: ' + fmtBRL(capProxy);
   const comAci = filteredObras.filter(o => o.qAci > 0).length;
   const comOp = filteredObras.filter(o => o.qOp > 0).length;
-  document.getElementById('kpi-com-aci').textContent = comAci.toLocaleString('pt-BR');
+  const pctAci = n ? (comAci / n * 100).toFixed(1) : '0.0';
+  document.getElementById('kpi-com-aci').textContent = `${comAci.toLocaleString('pt-BR')} (${pctAci}%)`;
   document.getElementById('kpi-com-op').textContent = `${comOp.toLocaleString('pt-BR')} com Compras/Engenharia/Dir.`;
+  const uLk = filteredUnicos.filter(u => u.lk).length;
+  const uTel = filteredUnicos.filter(u => u.tel).length;
+  const uEm = filteredUnicos.filter(u => u.email).length;
   document.getElementById('kpi-unicos').textContent = filteredUnicos.length.toLocaleString('pt-BR');
+  document.getElementById('kpi-hist-sub').textContent = `LinkedIn: ${uLk.toLocaleString('pt-BR')} · Tel: ${uTel.toLocaleString('pt-BR')} · E-mail: ${uEm.toLocaleString('pt-BR')}`;
 
   renderCharts();
   renderObrasTable();
@@ -625,30 +635,83 @@ function renderCharts() {
     }
   });
 
-  // 2. Doughnut Fontes
+  // 2. Doughnut Fontes (12 cores + clique p/ filtrar)
   const fCounts = {};
   filteredObras.forEach(o => { fCounts[o.fonte] = (fCounts[o.fonte] || 0) + 1; });
   const fEnt = Object.entries(fCounts).sort((a, b) => b[1] - a[1]);
-  const palette = ['#38bdf8','#818cf8','#22c55e','#f59e0b','#f43f5e','#14b8a6','#a855f7'];
+  const palette = ['#38bdf8','#818cf8','#22c55e','#f59e0b','#f43f5e','#14b8a6','#a855f7','#ec4899','#eab308','#06b6d4','#84cc16','#fb7185'];
   destroyChart('c-fontes');
   CHARTS['c-fontes'] = new Chart(document.getElementById('c-fontes'), {
     type: 'doughnut',
-    data: { labels: fEnt.map(e => e[0]), datasets: [{ data: fEnt.map(e => e[1]), backgroundColor: palette, borderColor: '#1e293b', borderWidth: 3, hoverOffset: 8 }] },
+    data: { labels: fEnt.map(e => e[0]), datasets: [{ data: fEnt.map(e => e[1]), backgroundColor: fEnt.map((_, i) => palette[i % palette.length]), borderColor: '#1e293b', borderWidth: 2, hoverOffset: 8 }] },
     options: {
-      responsive: true, maintainAspectRatio: false, cutout: '62%',
-      plugins: { legend: { position: window.innerWidth < 640 ? 'bottom' : 'right', labels: { boxWidth: 12, padding: 10 } } }
+      responsive: true, maintainAspectRatio: false, cutout: '60%',
+      onClick: (_, els) => {
+        if (!els.length) return;
+        const val = fEnt[els[0].index][0];
+        const sel = document.getElementById('f-fonte');
+        sel.value = sel.value === val ? '' : val;
+        applyFilters();
+      },
+      plugins: { legend: { position: window.innerWidth < 640 ? 'bottom' : 'right', labels: { boxWidth: 11, padding: 8, font: { size: 11 } } } }
     }
   });
 
-  // 3. Perfis Anti-Spam
+  // 3. Fases da Obra (Timing)
+  const faseOrder = ['1_ANUNCIO_LICITACAO_LP','2_NAO_INICIADA_INICIAL','3_LI_LIBERADA_CANTEIRO','4_EM_EXECUCAO_ANDAMENTO','5_FINANCIAMENTO_ATIVO'];
+  const faseNames = {'1_ANUNCIO_LICITACAO_LP':'1. Anúncio / LP','2_NAO_INICIADA_INICIAL':'2. Inicial','3_LI_LIBERADA_CANTEIRO':'3. LI Liberada','4_EM_EXECUCAO_ANDAMENTO':'4. Em Execução','5_FINANCIAMENTO_ATIVO':'5. Financ. BNDES'};
+  const faseColors = ['#38bdf8','#94a3b8','#22c55e','#f59e0b','#818cf8'];
+  const faCounts = {};
+  filteredObras.forEach(o => { faCounts[o.fase] = (faCounts[o.fase] || 0) + 1; });
+  destroyChart('c-fases');
+  CHARTS['c-fases'] = new Chart(document.getElementById('c-fases'), {
+    type: 'bar',
+    data: { labels: faseOrder.map(k => faseNames[k]), datasets: [{ data: faseOrder.map(k => faCounts[k] || 0), backgroundColor: faseColors, borderRadius: 8, barThickness: 20 }] },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      onClick: (_, els) => {
+        if (!els.length) return;
+        const val = faseOrder[els[0].index];
+        const sel = document.getElementById('f-fase');
+        sel.value = sel.value === val ? '' : val;
+        applyFilters();
+      },
+      plugins: { legend: { display: false } },
+      scales: { x: { grid: { color: gridCol } }, y: { grid: { display: false } } }
+    }
+  });
+
+  // 4. Faixas de Lead Score
+  const scBuckets = [0, 0, 0, 0];
+  filteredObras.forEach(o => {
+    if (o.score >= 80) scBuckets[0]++;
+    else if (o.score >= 60) scBuckets[1]++;
+    else if (o.score >= 40) scBuckets[2]++;
+    else scBuckets[3]++;
+  });
+  destroyChart('c-scores');
+  CHARTS['c-scores'] = new Chart(document.getElementById('c-scores'), {
+    type: 'bar',
+    data: {
+      labels: ['80–100 (Muito Quente)', '60–79 (Quente)', '40–59 (Médio)', '0–39 (Baixo)'],
+      datasets: [{ data: scBuckets, backgroundColor: ['#22c55e', '#38bdf8', '#f59e0b', '#64748b'], borderRadius: 8, barThickness: 28 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { grid: { display: false } }, y: { grid: { color: gridCol } } }
+    }
+  });
+
+  // 5. Perfis Anti-Spam
   const prCounts = {};
   filteredUnicos.forEach(u => { prCounts[u.perfil] = (prCounts[u.perfil] || 0) + 1; });
   const prEnt = Object.entries(prCounts).sort((a, b) => a[0].localeCompare(b[0]));
-  const prColors = { '1_COMPRADOR_SUPRIMENTOS':'#22c55e', '2_GESTOR_TECNICO_OBRA':'#38bdf8', '3_DIRETORIA_EXECUTIVA':'#818cf8', '4_SOCIO_QSA':'#f59e0b', '5_OUTRO_NAO_CLASSIFICADO':'#64748b' };
+  const prColors = { '1_COMPRADOR_SUPRIMENTOS':'#22c55e', '2_ENGENHARIA_OBRAS_CAPEX':'#06b6d4', '2_GESTOR_TECNICO_OBRA':'#38bdf8', '3_DIRETORIA_EXECUTIVA':'#818cf8', '4_SOCIO_QSA':'#f59e0b', '5_OUTRO_NAO_CLASSIFICADO':'#64748b' };
   destroyChart('c-perfis');
   CHARTS['c-perfis'] = new Chart(document.getElementById('c-perfis'), {
     type: 'bar',
-    data: { labels: prEnt.map(e => e[0].replace(/^\d_/, '')), datasets: [{ data: prEnt.map(e => e[1]), backgroundColor: prEnt.map(e => prColors[e[0]] || '#38bdf8'), borderRadius: 8, barThickness: 22 }] },
+    data: { labels: prEnt.map(e => e[0].replace(/^\d_/, '')), datasets: [{ data: prEnt.map(e => e[1]), backgroundColor: prEnt.map(e => prColors[e[0]] || '#38bdf8'), borderRadius: 8, barThickness: 20 }] },
     options: {
       indexAxis: 'y', responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
@@ -656,7 +719,7 @@ function renderCharts() {
     }
   });
 
-  // 4. Combo Top 10 UFs (Obras + CAPEX bi)
+  // 6. Combo Top 10 UFs (Obras + CAPEX bi, clique p/ filtrar)
   const ufMap = {};
   filteredObras.forEach(o => {
     if (!ufMap[o.uf]) ufMap[o.uf] = { qtd: 0, cap: 0 };
@@ -675,6 +738,13 @@ function renderCharts() {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
+      onClick: (_, els) => {
+        if (!els.length) return;
+        const val = ufEnt[els[0].index][0];
+        const sel = document.getElementById('f-uf');
+        sel.value = sel.value === val ? '' : val;
+        applyFilters();
+      },
       plugins: { legend: { position: 'top', labels: { boxWidth: 12 } } },
       scales: {
         x: { grid: { display: false } },
