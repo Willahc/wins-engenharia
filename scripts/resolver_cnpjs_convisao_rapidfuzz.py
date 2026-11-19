@@ -76,7 +76,7 @@ def main() -> None:
             cands = con.execute(f"""
                 SELECT cnpj, razao_social
                 FROM fornecedores
-                WHERE situacao = '02'
+                WHERE (situacao = 'ATIVA' OR situacao IS NULL)
                   AND UPPER(razao_social) LIKE ?
                   {uf_clause}
                 ORDER BY (SUBSTR(cnpj, 9, 4) = '0001') DESC, porte_inferido DESC
