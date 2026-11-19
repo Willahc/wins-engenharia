@@ -1,27 +1,28 @@
 # WiNS Engenharia — Base Consolidada de Obras & Decisores (2026–2027)
 
-## Resumo do Estado Atual (2026-11-18)
+## Resumo do Estado Atual (2026-11-19)
 
-- **Escopo**: Obras civis e industriais ativas (2026–2027), CAPEX > R$ 100 mil, Brasil, combinando fontes oficiais (`ANEEL SIGA`, `BNDES`, `PNCP`, `IBAMA SISLIC`, `Portal de Obras MG`) + portais industriais (`ConVisão CNC`, `CIMM Investimentos`) e radar setorial (`BVMI 2026`).
-- **Total de Obras Consolidadas (`todas_obras_consolidadas`)**: **3.316**
-  - Base oficial inicial (`ANEEL`, `BNDES`, `PNCP`): **2.604**
-  - **ConVisão CNC (`convisao_cnc`)**: **488** obras deduplicadas (**150** com CNPJ, **294** com decisor acionável = **60,2%**)
+- **Escopo**: Obras civis e industriais ativas (2026–2027), CAPEX > R$ 100 mil, Brasil, combinando fontes oficiais (`ANEEL SIGA`, `ANEEL SIGET Transmissão`, `BNDES`, `PNCP`, `CVM Debêntures Incentivadas`, `IBAMA SISLIC`, `Portal de Obras MG`) + portais industriais (`ConVisão CNC`, `CIMM Investimentos`) e radar setorial (`BVMI 2026`).
+- **Total de Obras Consolidadas (`todas_obras_consolidadas`)**: **4.490**
+  - **ConVisão CNC (`convisao_cnc`)**: **490** obras deduplicadas (**157** com CNPJ, **306** com decisor acionável)
+  - **ANEEL Transmissão (`aneel_transmissao` / SIGET)**: **756** empreendimentos de transmissão e subestações
+  - **CVM Debêntures Incentivadas (`debentures_infra`)**: **53** ofertas de infraestrutura 2026+
   - **Portal de Obras MG (`portal_obras_mg`)**: **168** obras em andamento/a iniciar (**81** acionáveis, **693** vínculos técnicos/fiscais)
   - **IBAMA SISLIC (`ibama_sislic`)**: **42** licenças `LP`/`LI` de 2026 (**36** com CNPJ resolvido)
   - **CIMM Investimentos (`cimm_investimentos`)**: **14** investimentos industriais (**10** acionáveis)
-  - **Obras com decisor acionável**: **2.908** (**87,7%**)
-  - **Obras com Compras / Engenharia / CAPEX**: **2.318**
-  - **Obras sem nenhum LinkedIn (fila pendente)**: **749** (`627` empresas únicas em `Arquivos_Tratados/fila_empresas_unicas_sem_linkedin.csv`)
+  - **Obras com decisor acionável**: **3.794** (**84,5%**)
+  - **Obras com Compras / Engenharia / CAPEX**: **2.576**
+  - **Obras sem nenhum LinkedIn (fila pendente)**: **1.366** (`996` empresas únicas em `Arquivos_Tratados/fila_empresas_unicas_sem_linkedin.csv`)
 - **Classificação por Fase da Obra (`fase_obra`)**:
   - `1_ANUNCIO_LICITACAO_LP`: **236**
   - `2_NAO_INICIADA_INICIAL`: **2.462**
   - `3_LI_LIBERADA_CANTEIRO`: **33**
   - `4_EM_EXECUCAO_ANDAMENTO`: **409**
   - `5_FINANCIAMENTO_ATIVO`: **176**
-- **Decisores Únicos Acionáveis (`campanha_por_decisor_unico`)**: **2.433 pessoas únicas**
-  - **Com LinkedIn validado**: **1.249**
-  - **Com telefone validado (`google/libphonenumber`)**: **1.632**
-  - **Com e-mail corporativo**: **839**
+- **Decisores Únicos Acionáveis (`campanha_por_decisor_unico`)**: **3.118 pessoas únicas**
+  - **Com LinkedIn validado**: **1.410**
+  - **Com telefone validado (`google/libphonenumber`)**: **2.257**
+  - **Com e-mail corporativo**: **1.178**
 - **Radar BVMI (`bvmi_radar_2026` / `bvmi_match_obras_wins`)**: **189** projetos industriais de 2026, com **51** alertas cruzados em **178** pares de obras nominais no WiNS.
 - **Base de Fornecedores Integrada**: **4.090.553 CNPJs** saneados e indexados no DuckDB.
 - **GitHub & Render**: `https://github.com/Willahc/wins-engenharia` (Static Site Blueprint em `render.yaml`).
@@ -30,9 +31,9 @@
 
 ## Principais Entregáveis
 
-- **Dashboard Interativo**: `Dashboard/wins_engenharia_validacao.html` (`66,9 KB`) + `Dashboard/data/wins_data.js` (`5,33 MB`)
+- **Dashboard Interativo**: `Dashboard/wins_engenharia_validacao.html` (`66,9 KB`) + `Dashboard/data/wins_data.js` (`7,20 MB`)
   - Aba **Alertas & Radar BVMI**, filtro global por **Fase da Obra (`fase_obra`)** e **Status CRM** (`Novo`, `Em Contato`, `Proposta`, `Descartado` persistidos em `localStorage` com exportação/importação JSON), **Lead Score (`score_prioridade` 0–100)**, botão **Copiar Abordagem**, **Top 8 Fornecedores Aderentes** na página da Obra, barra de filtros dedicada para **Fornecedores** e aba **Decisores Únicos (Anti-Spam)**.
-- **Planilha Multi-Abas para Prospecção**: `Arquivos_Tratados/WiNS_Prospeccao_Obras_2026_2027.xlsx` (`2,42 MB` — `6.878` prioritários Compras/Eng, `3.316` obras, `9.898` decisores acionáveis)
+- **Planilha Multi-Abas para Prospecção**: `Arquivos_Tratados/WiNS_Prospeccao_Obras_2026_2027.xlsx` (`3,11 MB` — `7.756` prioritários Compras/Eng, `4.490` obras, `14.059` decisores acionáveis)
 - **CSV Anti-Spam (1 linha por pessoa)**: `Arquivos_Tratados/WiNS_Prospeccao_Por_Decisor_Unico.csv`
 - **Banco DuckDB Principal**: `Banco_Dados/wins_engenharia.duckdb`
 - **Banco DuckDB Leve (2026–2027)**: `Banco_Dados/obras_civil_industrial_2026_2027_100k.duckdb`
