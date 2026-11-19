@@ -63,7 +63,8 @@ def main():
     if os.path.exists(os.path.join(BASE_DIR, "Arquivos_Tratados", "retorno_openbot_convisao_cimm.csv")):
         run_step("ingerir_convisao_cimm_decisores.py")
 
-    # 3. Higiene e recuperacao incremental de emails/canais
+    # 3. Higiene e recuperacao incremental de QSA/emails/canais
+    run_step("enriquecer_qsa_novas_obras.py")
     run_step("mapear_dominios_verificados.py")
     if args.full:
         run_step("higienizar_linkedin_banco.py")
