@@ -67,6 +67,7 @@ def main():
     # 3. Higiene e recuperacao incremental de QSA/emails/canais
     run_step("enriquecer_qsa_novas_obras.py")
     run_step("mapear_dominios_verificados.py")
+    run_step("auditar_e_sanear_decisores.py")
     if args.full:
         run_step("higienizar_linkedin_banco.py")
         run_step("normalizar_telefones_libphonenumber.py")
