@@ -75,12 +75,17 @@ def main() -> None:
             GROUP BY 1
         )
         SELECT
-            t.* EXCLUDE (total_decisores, decisores_acionaveis, decisores_operacionais),
+            t.* EXCLUDE (dominio_corporativo, whatsapp_oficial, telefones_site, total_decisores, decisores_acionaveis, decisores_operacionais),
+            COALESCE(NULLIF(TRIM(dom.dominio_corporativo), ''), t.dominio_corporativo) AS dominio_corporativo,
+            COALESCE(NULLIF(TRIM(wa.whatsapp_oficial), ''), t.whatsapp_oficial) AS whatsapp_oficial,
+            COALESCE(NULLIF(TRIM(wa.telefones_site), ''), t.telefones_site) AS telefones_site,
             COALESCE(d.qtd_decisores, 0) AS total_decisores,
             COALESCE(d.qtd_acionaveis, 0) AS decisores_acionaveis,
             COALESCE(d.qtd_compras_eng, 0) AS decisores_operacionais
         FROM todas_obras_consolidadas t
-        LEFT JOIN novas_dec d ON t.obra_id = d.id_externo;
+        LEFT JOIN novas_dec d ON t.obra_id = d.id_externo
+        LEFT JOIN empresa_dominios_verificados dom ON t.obra_cnpj = dom.cnpj
+        LEFT JOIN empresa_whatsapp_oficial wa ON COALESCE(NULLIF(TRIM(dom.dominio_corporativo), ''), t.dominio_corporativo) = wa.dominio;
     """)
 
     # 3. Reconstruir campanha_por_decisor_unico

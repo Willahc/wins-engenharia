@@ -70,6 +70,33 @@ dom_forn AS (
     FROM fornecedores
     WHERE email IS NOT NULL AND email LIKE '%@%'
       AND LOWER(SPLIT_PART(email, '@', 2)) NOT IN ({free_list_sql})
+      AND NOT REGEXP_MATCHES(LOWER(email), '(contab|contabil|despach|assessoria|auditoria|cartorio)')
+),
+dom_val AS (
+    SELECT
+        obra_cnpj AS cnpj,
+        SUBSTR(obra_cnpj, 1, 8) AS cnpj_raiz,
+        LOWER(SPLIT_PART(decisor_email, '@', 2)) AS dominio,
+        'VALIDACAO_OBRAS_NOVAS' AS origem_dominio,
+        COUNT(*) AS qtd_evidencias
+    FROM validacao_decisores_obras_novas
+    WHERE obra_cnpj IS NOT NULL AND decisor_email IS NOT NULL AND decisor_email LIKE '%@%'
+      AND LOWER(SPLIT_PART(decisor_email, '@', 2)) NOT IN ({free_list_sql})
+      AND NOT REGEXP_MATCHES(LOWER(decisor_email), '(contab|contabil|despach|assessoria|auditoria|cartorio)')
+    GROUP BY 1, 2, 3
+),
+dom_cons AS (
+    SELECT
+        cnpj,
+        SUBSTR(cnpj, 1, 8) AS cnpj_raiz,
+        LOWER(SPLIT_PART(email, '@', 2)) AS dominio,
+        'DECISORES_CONSOLIDADO' AS origem_dominio,
+        COUNT(*) AS qtd_evidencias
+    FROM decisores_por_empresa_consolidado
+    WHERE cnpj IS NOT NULL AND email IS NOT NULL AND email LIKE '%@%'
+      AND LOWER(SPLIT_PART(email, '@', 2)) NOT IN ({free_list_sql})
+      AND NOT REGEXP_MATCHES(LOWER(email), '(contab|contabil|despach|assessoria|auditoria|cartorio)')
+    GROUP BY 1, 2, 3
 ),
 alvo_cnpjs AS (
     SELECT DISTINCT
@@ -87,11 +114,14 @@ candidatos AS (
         a.cnpj_raiz,
         a.obra_empresa,
         a.qtd_obras_ativas,
-        COALESCE(d1.dominio, d2.dominio, d3.dominio) AS dominio_corporativo,
+        COALESCE(d1.dominio, d4.dominio, d2.dominio, d3.dominio, d5.dominio, d6.dominio) AS dominio_corporativo,
         CASE
             WHEN d1.dominio IS NOT NULL THEN '1_DECISORES_CNPJ_EXATO'
-            WHEN d2.dominio IS NOT NULL THEN '2_FORNECEDORES_CNPJ_EXATO'
-            WHEN d3.dominio IS NOT NULL THEN '3_DECISORES_CNPJ_RAIZ'
+            WHEN d4.dominio IS NOT NULL THEN '2_VALIDACAO_CNPJ_EXATO'
+            WHEN d2.dominio IS NOT NULL THEN '3_FORNECEDORES_CNPJ_EXATO'
+            WHEN d3.dominio IS NOT NULL THEN '4_DECISORES_CNPJ_RAIZ'
+            WHEN d5.dominio IS NOT NULL THEN '5_CONSOLIDADO_CNPJ_RAIZ'
+            WHEN d6.dominio IS NOT NULL THEN '6_FORNECEDORES_CNPJ_RAIZ'
             ELSE 'SEM_DOMINIO_LOCAL'
         END AS origem_dominio
     FROM alvo_cnpjs a
@@ -104,6 +134,15 @@ candidatos AS (
     LEFT JOIN (
         SELECT DISTINCT ON (cnpj_raiz) cnpj_raiz, dominio FROM dom_dec WHERE cnpj_raiz IS NOT NULL ORDER BY cnpj_raiz, qtd_evidencias DESC
     ) d3 ON a.cnpj_raiz = d3.cnpj_raiz
+    LEFT JOIN (
+        SELECT DISTINCT ON (cnpj) cnpj, dominio FROM dom_val WHERE cnpj IS NOT NULL ORDER BY cnpj, qtd_evidencias DESC
+    ) d4 ON a.cnpj = d4.cnpj
+    LEFT JOIN (
+        SELECT DISTINCT ON (cnpj_raiz) cnpj_raiz, dominio FROM dom_cons WHERE cnpj_raiz IS NOT NULL ORDER BY cnpj_raiz, qtd_evidencias DESC
+    ) d5 ON a.cnpj_raiz = d5.cnpj_raiz
+    LEFT JOIN (
+        SELECT DISTINCT ON (cnpj_raiz) cnpj_raiz, dominio FROM dom_forn WHERE cnpj_raiz IS NOT NULL ORDER BY cnpj_raiz, dominio
+    ) d6 ON a.cnpj_raiz = d6.cnpj_raiz
 )
 SELECT * FROM candidatos
 ORDER BY qtd_obras_ativas DESC;
