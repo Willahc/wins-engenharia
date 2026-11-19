@@ -37,7 +37,12 @@ def main():
     parser.add_argument(
         "--full",
         action="store_true",
-        help="Inclui coleta das fontes oficiais (ANEEL/BNDES/PNCP) e higiene completa de telefones/LinkedIn",
+        help="Inclui higiene completa de telefones/LinkedIn, propagacao QSA, SMTP e WhatsApp nos sites",
+    )
+    parser.add_argument(
+        "--enrich",
+        action="store_true",
+        help="Executa descoberta SMTP de emails e varredura de WhatsApp nos sites corporativos",
     )
     parser.add_argument(
         "--publish",
@@ -67,6 +72,9 @@ def main():
     # 3. Higiene e recuperacao incremental de QSA/emails/canais
     run_step("enriquecer_qsa_novas_obras.py")
     run_step("mapear_dominios_verificados.py")
+    if args.enrich or args.full:
+        run_step("descobrir_emails_smtp_validos.py")
+        run_step("varrer_whatsapp_sites.py")
     run_step("auditar_e_sanear_decisores.py")
     if args.full:
         run_step("higienizar_linkedin_banco.py")

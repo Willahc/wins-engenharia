@@ -15,7 +15,7 @@ CREATE OR REPLACE TEMP TABLE prop_socio AS
 WITH obras_com_ce AS (
     SELECT DISTINCT id_externo
     FROM validacao_decisores_obras_novas
-    WHERE perfil_decisor IN ('1_COMPRADOR_SUPRIMENTOS', '2_GESTOR_TECNICO_OBRA')
+    WHERE perfil_decisor IN ('1_COMPRADOR_SUPRIMENTOS', '2_GESTOR_TECNICO_OBRA', '2_ENGENHARIA_OBRAS_CAPEX')
       AND is_contato_acionavel = TRUE
 ),
 socios_em_com_ce AS (
@@ -32,7 +32,7 @@ obras_sem_ce AS (
     SELECT t.*
     FROM todas_obras_consolidadas t
     WHERE t.decisores_operacionais = 0
-      AND t.fonte IN ('aneel_siga', 'bndes_financiamento')
+      AND t.fonte IN ('aneel_siga', 'aneel_transmissao', 'bndes_financiamento', 'debentures_infra', 'convisao_cnc', 'ibama_sislic', 'cimm_investimentos')
 ),
 ponte_obras AS (
     SELECT DISTINCT
@@ -57,7 +57,7 @@ decisores_doadores AS (
         v.perfil_decisor
     FROM ponte_obras p
     JOIN validacao_decisores_obras_novas v ON p.obra_doadora = v.id_externo
-    WHERE v.perfil_decisor IN ('1_COMPRADOR_SUPRIMENTOS', '2_GESTOR_TECNICO_OBRA')
+    WHERE v.perfil_decisor IN ('1_COMPRADOR_SUPRIMENTOS', '2_GESTOR_TECNICO_OBRA', '2_ENGENHARIA_OBRAS_CAPEX')
       AND v.is_contato_acionavel = TRUE
 )
 SELECT DISTINCT ON (o.obra_id, LOWER(TRIM(d.decisor_nome)))
@@ -88,42 +88,25 @@ ORDER BY o.obra_id, LOWER(TRIM(d.decisor_nome)), d.perfil_decisor;
 
 cnt_prop = con.execute("SELECT COUNT(*), COUNT(DISTINCT id_externo) FROM prop_socio").fetchone()
 if cnt_prop[0] > 0:
-    con.execute("INSERT INTO validacao_decisores_obras_novas SELECT * FROM prop_socio;")
     con.execute("""
-    CREATE OR REPLACE TABLE validacao_decisores_obras_novas AS
-    SELECT DISTINCT ON (id_externo, LOWER(TRIM(decisor_nome)), COALESCE(decisor_email, ''), COALESCE(decisor_linkedin, ''))
-        *
-    FROM validacao_decisores_obras_novas
-    ORDER BY id_externo, LOWER(TRIM(decisor_nome)), COALESCE(decisor_email, ''), COALESCE(decisor_linkedin, ''), perfil_decisor, is_contato_acionavel DESC;
+        INSERT INTO validacao_decisores_obras_novas (
+            id_externo, fonte, obra_nome, obra_empresa, obra_cnpj, categoria_macro,
+            obra_uf, capex_estimado, capex_tipo, url_origem, tipo_match, decisor_id,
+            decisor_nome, decisor_cargo, decisor_email, decisor_telefone, decisor_linkedin,
+            qualidade_lead, is_contato_acionavel, perfil_decisor
+        )
+        SELECT
+            id_externo, fonte, obra_nome, obra_empresa, obra_cnpj, categoria_macro,
+            obra_uf, capex_estimado, capex_tipo, url_origem, tipo_match, decisor_id,
+            decisor_nome, decisor_cargo, decisor_email, decisor_telefone, decisor_linkedin,
+            qualidade_lead, is_contato_acionavel, perfil_decisor
+        FROM prop_socio;
     """)
 
-con.execute("""
-CREATE OR REPLACE TABLE todas_obras_consolidadas AS
-WITH novas_dec AS (
-    SELECT
-        id_externo,
-        COUNT(*) AS qtd_decisores,
-        SUM(CASE WHEN is_contato_acionavel THEN 1 ELSE 0 END) AS qtd_acionaveis,
-        SUM(CASE WHEN perfil_decisor IN ('1_COMPRADOR_SUPRIMENTOS','2_GESTOR_TECNICO_OBRA') THEN 1 ELSE 0 END) AS qtd_compras_eng
-    FROM validacao_decisores_obras_novas
-    GROUP BY 1
-)
-SELECT
-    t.* EXCLUDE (total_decisores, decisores_acionaveis, decisores_operacionais),
-    COALESCE(d.qtd_decisores, 0) AS total_decisores,
-    COALESCE(d.qtd_acionaveis, 0) AS decisores_acionaveis,
-    COALESCE(d.qtd_compras_eng, 0) AS decisores_operacionais
-FROM todas_obras_consolidadas t
-LEFT JOIN novas_dec d ON t.obra_id = d.id_externo;
-""")
-
-after_ce = con.execute("SELECT COUNT(*) FROM todas_obras_consolidadas WHERE decisores_operacionais > 0").fetchone()[0]
-con.execute("ANALYZE;")
 con.execute("CHECKPOINT;")
 con.close()
 
 print(f"[PROPAGACAO SOCIO QSA] +{cnt_prop[0]:,} vinculos em {cnt_prop[1]:,} obras!")
-print(f"Obras com Compras/Eng/CAPEX: {before_ce:,} -> {after_ce:,} / 2,604 ({after_ce/2604*100:.1f}%)")
 
-# Atualiza Excel, CSVs e Dashboard HTML
-subprocess.run(["python", os.path.join(BASE_DIR, "scripts", "limpar_cargos_decisores.py")], check=True)
+# Roda saneamento + sincronizacao final (Dashboard, Excel, score_prioridade)
+subprocess.run(["python", os.path.join(BASE_DIR, "scripts", "auditar_e_sanear_decisores.py")], check=True)
