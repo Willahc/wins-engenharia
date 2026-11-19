@@ -1,10 +1,11 @@
+import csv
+import io
 import os
 import re
 import time
-import csv
-import io
-import requests
+from datetime import datetime
 import duckdb
+import requests
 
 BASE_DIR = r"C:\Users\kbadmin\Documents\Projetos\01_Ecossistema_WiNS\Engenharia"
 MAIN_DB = os.path.join(BASE_DIR, "Banco_Dados", "wins_engenharia.duckdb")
@@ -74,11 +75,12 @@ def build_pncp_url(it: dict) -> str:
 def fetch_pncp():
     url = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
     headers = {"Accept": "*/*", "User-Agent": "WiNS-Engenharia-Sync/1.0"}
+    today_ymd = datetime.now().strftime("%Y%m%d")
     windows = [
         ("20260701", "20260815"),
         ("20260816", "20260930"),
         ("20261001", "20261031"),
-        ("20261101", "20261116"),
+        ("20261101", max("20261116", today_ymd)),
     ]
     modalidades = (4, 5, 6, 8)
     rows = []
@@ -283,7 +285,8 @@ def fetch_aneel_siga():
             if fase not in ("Construção", "Construção não iniciada"):
                 continue
             dt_fim_vig = (r.get("DatFimVigencia") or "")[:10]
-            if dt_fim_vig and dt_fim_vig < "2026-11-16":
+            today_iso = datetime.now().strftime("%Y-%m-%d")
+            if dt_fim_vig and dt_fim_vig < today_iso:
                 continue
             uf = (r.get("SigUFPrincipal") or "").strip().upper()
             if uf not in UFS_BR:

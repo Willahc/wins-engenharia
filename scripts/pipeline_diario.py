@@ -47,9 +47,9 @@ def main():
     args = parser.parse_args()
 
     if not args.skip_api:
-        if args.full:
-            run_step("captar_todas_fontes_2026_2027.py")
-        # 1. Portais e fontes preditivas incrementais (preservam decisores e obras existentes)
+        # 1. Fontes oficiais incrementais (BNDES, ANEEL SIGA, PNCP, ObrasGov, Recife)
+        run_step("coletar_oficiais_incremental.py")
+        # 2. Portais e fontes preditivas incrementais (preservam decisores e obras existentes)
         run_step("coletar_convisao_obras.py")
         run_step("resolver_cnpjs_convisao_rapidfuzz.py")
         run_step("limpar_duplicidades_cnc.py")
