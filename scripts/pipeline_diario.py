@@ -47,8 +47,9 @@ def main():
     args = parser.parse_args()
 
     if not args.skip_api:
-        # 1. Fontes oficiais incrementais (BNDES, ANEEL SIGA, PNCP, ObrasGov, Recife)
+        # 1. Fontes oficiais incrementais (BNDES, ANEEL SIGA, ANEEL Transmissao SIGET, PNCP, ObrasGov, Recife)
         run_step("coletar_oficiais_incremental.py")
+        run_step("coletar_aneel_siget_transmissao.py")
         # 2. Portais e fontes preditivas incrementais (preservam decisores e obras existentes)
         run_step("coletar_convisao_obras.py")
         run_step("resolver_cnpjs_convisao_rapidfuzz.py")
